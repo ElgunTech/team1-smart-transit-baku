@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowUp, Bus, Check, ChevronDown, ChevronUp, Clock3, LocateFixed, MapPin, Navigation, Search, Users, X } from "lucide-react";
 import LiveTracking from "../components/LiveTracking.jsx";
+import RewardsCard, { useRewards } from "../components/Rewards.jsx";
 import { BaseMap, BusLayer, FitBounds, FlyTo, MyLocation, PickOnMap, RouteLine, StopLayer } from "../components/TransitMap.jsx";
 import { currentPosition, distanceToPath, geoError } from "../lib/geo.js";
 import { Eta, LevelPill, RouteBadge, Skeleton } from "../components/ui.jsx";
@@ -89,6 +90,7 @@ export default function Passenger() {
     setPick(() => cb);
   };
   const locate = useMyLocation(toast);
+  const { data: rewards, refresh: refreshRewards } = useRewards();
   const me = trackFix || locate.fix;
   const panelRef = useRef(null);
 
@@ -156,9 +158,23 @@ export default function Passenger() {
           {tab === "routes" ? (
             <motion.section key="routes" className="tab-body" initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.18 }}>
               {route ? (
-                <RouteDetail key={route.id} route={route} live={live} onStop={openStop} onBack={() => setRouteId(null)} onFix={setTrackFix} onPickRequest={requestPick} />
+                <RouteDetail
+                  key={route.id}
+                  route={route}
+                  live={live}
+                  me={me}
+                  rewards={rewards}
+                  onReported={refreshRewards}
+                  onStop={openStop}
+                  onBack={() => setRouteId(null)}
+                  onFix={setTrackFix}
+                  onPickRequest={requestPick}
+                />
               ) : (
-                <RouteBrowser onSelect={selectRoute} />
+                <>
+                  <RewardsCard rewards={rewards} />
+                  <RouteBrowser onSelect={selectRoute} />
+                </>
               )}
             </motion.section>
           ) : (
@@ -389,7 +405,7 @@ function collapseStops(stops) {
   return out;
 }
 
-function RouteDetail({ route, live, onStop, onBack, onFix, onPickRequest }) {
+function RouteDetail({ route, live, me, rewards, onReported, onStop, onBack, onFix, onPickRequest }) {
   return (
     <motion.div className="stack" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
       <button className="back" onClick={onBack}><ArrowLeft size={16} /> Bütün xətlər</button>
@@ -421,25 +437,39 @@ function RouteDetail({ route, live, onStop, onBack, onFix, onPickRequest }) {
           )}
         </div>
       </div>
-      <ReportBox route={route} buses={live?.buses || []} />
+      <ReportBox route={route} buses={live?.buses || []} me={me} rewards={rewards} onReported={onReported} />
       <LiveTracking route={route} buses={live?.buses || []} onFix={onFix} onPickRequest={onPickRequest} />
     </motion.div>
   );
 }
 
-function ReportBox({ route, buses }) {
+const VERIFIED_BY_AZ = { gps: "GPS ilə", crowd: "digər sərnişinlərlə" };
+
+function ReportBox({ route, buses, me, rewards, onReported }) {
   const toast = useToast();
   const [busId, setBusId] = useState("");
   const [sending, setSending] = useState(null);
   const [sent, setSent] = useState(null);
+  const limitReached = rewards && rewards.today_reports >= rewards.daily_limit;
 
   const send = async (level) => {
     setSending(level);
     try {
-      const res = await post("/api/reports", { route_id: route.id, level, bus_id: busId || null });
+      const res = await post("/api/reports", {
+        route_id: route.id,
+        level,
+        bus_id: busId || null,
+        // location, when known, is the proof of presence that verifies the report
+        ...(me ? { lat: me.lat, lon: me.lon } : {}),
+      });
       setSent(level);
       setTimeout(() => setSent(null), 2200);
-      toast(`Təşəkkürlər! Xəttin cari sıxlığı: ${LEVEL_AZ[res.route_congestion.level]}`);
+      if (res.verified) {
+        toast(`+${res.points_awarded} xal! Bildiriş ${VERIFIED_BY_AZ[res.verified_by]} təsdiqləndi`);
+      } else {
+        toast("Bildiriş qəbul edildi. Başqa sərnişin təsdiqləsə +10 xal qazanacaqsınız");
+      }
+      onReported?.();
     } catch (e) {
       toast(e.message, "error");
     } finally {
@@ -449,8 +479,14 @@ function ReportBox({ route, buses }) {
 
   return (
     <div className="report-box">
-      <div className="report-title">Avtobusda sıxlıq necədir?</div>
-      <p>Bildirişiniz digər sərnişinlərə və operatora xətti tənzimləməyə kömək edir.</p>
+      <div className="report-head">
+        <div className="report-title">Avtobusda sıxlıq necədir?</div>
+        {rewards && <span className={`today-chip${limitReached ? " full" : ""}`}>Bu gün {rewards.today_reports}/{rewards.daily_limit}</span>}
+      </div>
+      <p>
+        Bildirişiniz digər sərnişinlərə və operatora kömək edir. Təsdiqlənmiş hər bildiriş <b>+{rewards?.points_per_report ?? 10} xal</b>
+        {me ? " · yeriniz təsdiq üçün göndəriləcək" : " · daha tez təsdiq üçün “Mənim yerim”i açın"}.
+      </p>
       <select value={busId} onChange={(e) => setBusId(e.target.value)} aria-label="Avtobus">
         <option value="">Avtobusu seçin (istəyə bağlı)</option>
         {buses.map((b) => (
@@ -459,7 +495,7 @@ function ReportBox({ route, buses }) {
       </select>
       <div className="report-buttons">
         {LEVELS.map((level) => (
-          <motion.button key={level} className={`level-btn ${level}`} disabled={sending !== null} onClick={() => send(level)} whileHover={{ y: -2 }} whileTap={{ scale: 0.94 }}>
+          <motion.button key={level} className={`level-btn ${level}`} disabled={sending !== null || limitReached} onClick={() => send(level)} whileHover={{ y: -2 }} whileTap={{ scale: 0.94 }}>
             <AnimatePresence mode="wait" initial={false}>
               {sent === level ? (
                 <motion.span key="ok" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>

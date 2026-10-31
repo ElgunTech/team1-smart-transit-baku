@@ -17,7 +17,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import config
 from .auth import AuthService, Forbidden, Unauthorized
 from .network import Network, build_default_network
-from .services import Conflict, InvalidInput, NotFound, RateLimited, TransitService
+from .services import (Conflict, DailyLimitReached, FeatureUnavailable, InvalidInput, NotFound, RateLimited,
+                       TransitService)
 from .simulator import Simulator
 from .store import Store
 
@@ -38,6 +39,9 @@ class ReportIn(BaseModel):
     level: Literal["low", "medium", "high"]
     bus_id: str | None = None
     stop_id: str | None = None
+    # optional reporter location: proof of presence used to verify the report
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
 
 
 class TrackingIn(BaseModel):
@@ -144,7 +148,18 @@ def multi_arrivals(request: Request, stops: str = Query(..., max_length=500)):
 @router.post("/reports", status_code=201)
 def create_report(body: ReportIn, request: Request, user: dict = Depends(current_user)):
     # The account id is the reporter identity: one report per line per cooldown.
-    return _svc(request).submit_report(body.route_id, body.level, f"user-{user['id']}", body.bus_id, body.stop_id)
+    return _svc(request).submit_report(body.route_id, body.level, f"user-{user['id']}", body.bus_id, body.stop_id,
+                                       lat=body.lat, lon=body.lon)
+
+
+@router.get("/rewards/me")
+def my_rewards(request: Request, user: dict = Depends(current_user)):
+    return _svc(request).rewards(f"user-{user['id']}")
+
+
+@router.post("/rewards/redeem")
+def redeem(request: Request, user: dict = Depends(current_user)):
+    return _svc(request).redeem_trip(f"user-{user['id']}")
 
 
 @router.post("/tracking", status_code=202)
@@ -240,6 +255,8 @@ def create_app(db_path: str | None = None, simulate: bool | None = None,
     app.add_exception_handler(Conflict, error(409))
     app.add_exception_handler(Unauthorized, error(401))
     app.add_exception_handler(Forbidden, error(403))
+    app.add_exception_handler(FeatureUnavailable, error(403))
+    app.add_exception_handler(DailyLimitReached, error(429))
 
     @app.exception_handler(RateLimited)
     def rate_limited(request: Request, exc: RateLimited):

@@ -29,6 +29,14 @@ class RateLimited(Exception):
         self.retry_after = retry_after
 
 
+class DailyLimitReached(Exception):
+    pass
+
+
+class FeatureUnavailable(Exception):
+    pass
+
+
 class TransitService:
     def __init__(self, store: Store, network: Network, clock: Callable[[], float] = time.time):
         self.store = store
@@ -257,9 +265,59 @@ class TransitService:
         return {"stop": results[0]["stop"], "stop_ids": stop_ids, "arrivals": items}
 
     # --- crowdsourcing -----------------------------------------------------------------
+    @staticmethod
+    def _day_start(now: float) -> float:
+        """Midnight of the current day in Baku time, as a UTC timestamp."""
+        local = now + config.UTC_OFFSET_SEC
+        return local - (local % 86400) - config.UTC_OFFSET_SEC
+
+    def _verify_report(self, report_id: int, route, level: str, client_id: str, now: float,
+                       lat: float | None, lon: float | None) -> str | None:
+        """Anti-fraud: a report is trusted only with evidence.
+        gps   - the reporter was on the route (within MAX_GPS_OFFSET_M) when reporting;
+        crowd - another passenger reported the same level on the same line within the window
+                (that earlier report becomes verified too)."""
+        how = None
+        if lat is not None and lon is not None:
+            self.store.set_report_location(report_id, lat, lon)
+            _, offset = route.geometry.project(lat, lon)
+            if offset <= config.MAX_GPS_OFFSET_M:
+                how = "gps"
+        others = self.store.corroborating_reports(route.id, level, client_id, now - config.WINDOW_SEC)
+        if others:
+            how = how or "crowd"
+            self.store.verify_reports([o["id"] for o in others], "crowd")
+        if how:
+            self.store.verify_reports([report_id], how)
+        return how
+
+    def rewards(self, client_id: str) -> dict:
+        now = self.clock()
+        stats = self.store.report_stats(client_id)
+        points = int(stats["verified"]) * config.POINTS_PER_REPORT
+        today = self.store.count_reports_since(client_id, self._day_start(now))
+        return {
+            "points": points,
+            "verified_reports": int(stats["verified"]),
+            "total_reports": stats["total"],
+            "points_per_report": config.POINTS_PER_REPORT,
+            "trip_cost": config.TRIP_COST_POINTS,
+            "trips_available": points // config.TRIP_COST_POINTS,
+            "today_reports": today,
+            "daily_limit": config.DAILY_REPORT_LIMIT,
+            "redeem_enabled": config.REWARDS_REDEEM_ENABLED,
+            "partner": config.REWARDS_PARTNER,
+        }
+
+    def redeem_trip(self, client_id: str) -> dict:
+        if not config.REWARDS_REDEEM_ENABLED:
+            raise FeatureUnavailable(
+                f"Xalları gedişə çevirmək {config.REWARDS_PARTNER} ilə əməkdaşlıq təsdiqləndikdən sonra aktiv olacaq.")
+        raise FeatureUnavailable("Bilet sistemi inteqrasiyası hələ qoşulmayıb.")
+
     def submit_report(self, route_id: str, level: str, client_id: str, bus_id: str | None = None,
                       stop_id: str | None = None, source: str = "user", enforce_cooldown: bool = True,
-                      evaluate: bool = True) -> dict:
+                      evaluate: bool = True, lat: float | None = None, lon: float | None = None) -> dict:
         route = self._route(route_id)
         if level not in engine.LEVELS:
             raise InvalidInput("Sıxlıq səviyyəsi low, medium və ya high olmalıdır")
@@ -274,13 +332,24 @@ class TransitService:
             last = self.store.last_report_ts(client_id, route_id)
             if last is not None and now - last < config.REPORT_COOLDOWN_SEC:
                 raise RateLimited(int(config.REPORT_COOLDOWN_SEC - (now - last)) + 1)
+        if source == "user":
+            if self.store.count_reports_since(client_id, self._day_start(now)) >= config.DAILY_REPORT_LIMIT:
+                raise DailyLimitReached(
+                    f"Gündə ən çoxu {config.DAILY_REPORT_LIMIT} bildiriş göndərmək olar. Sabah yenidən cəhd edin.")
         report_id = self.store.add_report(route_id, level, client_id, now, bus_id, stop_id, source)
+        verified_by = self._verify_report(report_id, route, level, client_id, now, lat, lon)
         alert = self.evaluate_route(route_id) if evaluate else None
-        return {
+        result = {
             "id": report_id,
             "route_congestion": self.congestion(route_id, now).as_dict(),
             "alert_id": alert["id"] if alert else None,
+            "verified": verified_by is not None,
+            "verified_by": verified_by,
         }
+        if source == "user":
+            result["points_awarded"] = config.POINTS_PER_REPORT if verified_by else 0
+            result["rewards"] = self.rewards(client_id)
+        return result
 
     # --- operator: analytics & anomaly alerts ---------------------------------------
     def evaluate_route(self, route_id: str, cong: engine.Congestion | None = None) -> dict | None:

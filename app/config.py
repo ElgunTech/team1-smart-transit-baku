@@ -25,6 +25,16 @@ HIGH_SHARE = _float("HIGH_SHARE", 0.6)
 # One passenger (client id) may report the same line once per cooldown.
 REPORT_COOLDOWN_SEC = _int("REPORT_COOLDOWN_SEC", 120)
 
+# Rewards: a passenger may send DAILY_REPORT_LIMIT reports per day (Baku time);
+# each *verified* report earns POINTS_PER_REPORT, TRIP_COST_POINTS buy one trip.
+DAILY_REPORT_LIMIT = _int("DAILY_REPORT_LIMIT", 3)
+POINTS_PER_REPORT = _int("POINTS_PER_REPORT", 10)
+TRIP_COST_POINTS = _int("TRIP_COST_POINTS", 100)
+UTC_OFFSET_SEC = _int("UTC_OFFSET_HOURS", 4) * 3600
+# Redeeming trips needs a ticketing partner; off until the BakuBus LLC partnership is confirmed.
+REWARDS_REDEEM_ENABLED = os.getenv("REWARDS_REDEEM_ENABLED", "0") == "1"
+REWARDS_PARTNER = os.getenv("REWARDS_PARTNER", "BakuBus MMC")
+
 # GPS pings further than this from the route polyline are rejected.
 MAX_GPS_OFFSET_M = _float("MAX_GPS_OFFSET_M", 400)
 

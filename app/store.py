@@ -75,6 +75,13 @@ class Store:
         self._lock = threading.Lock()
         with self._lock:
             self._conn.executescript(SCHEMA)
+            # migrate older databases: verification fields on reports
+            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(reports)")}
+            for col, ddl in (("verified", "INTEGER NOT NULL DEFAULT 0"), ("verified_by", "TEXT"),
+                             ("lat", "REAL"), ("lon", "REAL")):
+                if col not in cols:
+                    self._conn.execute(f"ALTER TABLE reports ADD COLUMN {col} {ddl}")
+            self._conn.commit()
 
     def _query(self, sql: str, params: tuple = ()) -> list[dict]:
         with self._lock:
@@ -150,6 +157,33 @@ class Store:
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (route_id, bus_id, stop_id, level, client_id, source, ts),
         )
+
+    def count_reports_since(self, client_id: str, since: float) -> int:
+        return self._one("SELECT COUNT(*) n FROM reports WHERE client_id = ? AND ts >= ?", (client_id, since))["n"]
+
+    def set_report_location(self, report_id: int, lat: float, lon: float) -> None:
+        self._exec("UPDATE reports SET lat = ?, lon = ? WHERE id = ?", (lat, lon, report_id))
+
+    def verify_reports(self, report_ids: list[int], how: str) -> None:
+        if not report_ids:
+            return
+        marks = ",".join("?" * len(report_ids))
+        self._exec(f"UPDATE reports SET verified = 1, verified_by = ? WHERE verified = 0 AND id IN ({marks})",
+                   (how, *report_ids))
+
+    def corroborating_reports(self, route_id: str, level: str, client_id: str, since: float) -> list[dict]:
+        """Reports from other passengers on the same line with the same level."""
+        return self._query(
+            "SELECT * FROM reports WHERE route_id = ? AND level = ? AND client_id != ? AND ts >= ?",
+            (route_id, level, client_id, since))
+
+    def report_stats(self, client_id: str) -> dict:
+        return self._one(
+            """SELECT COUNT(*) total, COALESCE(SUM(verified), 0) verified FROM reports WHERE client_id = ?""",
+            (client_id,))
+
+    def get_report(self, report_id: int) -> dict | None:
+        return self._one("SELECT * FROM reports WHERE id = ?", (report_id,))
 
     def last_report_ts(self, client_id: str, route_id: str) -> float | None:
         row = self._one("SELECT MAX(ts) ts FROM reports WHERE client_id = ? AND route_id = ?",

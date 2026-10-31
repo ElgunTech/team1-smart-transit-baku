@@ -65,7 +65,7 @@ npm run build      # build-i ../static qovluğuna yazır
 python -m pytest -q
 ```
 
-50 avtomatik test var. Onlar analitika engine-ini, anomaliya qaydasını, ETA hesablamasını (dairəvi xətlər daxil), GPS-in marşruta bağlanmasını, autentifikasiyanı, rolları, bütün API axınlarını və real opendata şəbəkəsinin yüklənib simulyasiya olunmasını yoxlayır. API testləri kiçik demo şəbəkəsində işləyir və saat saxta saatla (fake clock) idarə olunur, ona görə nəticə deterministikdir.
+56 avtomatik test var. Onlar analitika engine-ini, anomaliya qaydasını, ETA hesablamasını (dairəvi xətlər daxil), GPS-in marşruta bağlanmasını, autentifikasiyanı, rolları, bütün API axınlarını və real opendata şəbəkəsinin yüklənib simulyasiya olunmasını yoxlayır. API testləri kiçik demo şəbəkəsində işləyir və saat saxta saatla (fake clock) idarə olunur, ona görə nəticə deterministikdir.
 
 ### Açıq məlumatın yenidən idxalı
 
@@ -130,6 +130,15 @@ Bütün hədlər mühit dəyişənləri ilə dəyişdirilir: `WINDOW_MINUTES`, `
 
 ---
 
+### Xal sistemi və saxta bildirişə qarşı qoruma
+
+| Qayda | Məntiq |
+|---|---|
+| Gündəlik limit | Bir sərnişin gündə ən çoxu **3** bildiriş göndərə bilər (Bakı vaxtı ilə, `DAILY_REPORT_LIMIT`). Eyni xətt üçün 2 dəqiqədə 1 bildiriş. |
+| Təsdiq | Bildiriş iki halda təsdiqlənir: **GPS** (göndərən anda sərnişin xəttin marşrutuna ≤ 400 m məsafədədir) və ya **müstəqil sərnişin** (10 dəqiqə ərzində başqa hesabdan həmin xəttə eyni səviyyə bildirilib; bu halda əvvəlki bildiriş də təsdiqlənir). Sərnişin öz bildirişini özü təsdiqləyə bilməz. |
+| Xal | Yalnız təsdiqlənmiş bildirişə **10 xal** verilir. **100 xal = 1 pulsuz gediş.** |
+| Gedişə çevirmə | Hələ aktiv deyil (`REWARDS_REDEEM_ENABLED=0`). **Bu funksiya yalnız BakuBus MMC ilə əməkdaşlıq təsdiqləndikdən sonra işə düşəcək.** Xallar indidən toplanır. |
+
 ### Canlı GPS (crowdsourcing)
 
 Bakı avtobusları üçün açıq real vaxt GPS API-si yoxdur. Peyk məlumatı isə real vaxt izləmə üçün yararsızdır. Ona görə sistem avtobusun GPS-ini sərnişinin özündən alır.
@@ -154,7 +163,10 @@ Eyni mexanizm rəsmi GPS axını (`/api/gps`) üçün də işləyir. Qeyd: brauz
 | GET | `/api/buses?route_id=` | istifadəçi | Avtobusların canlı mövqeyi və sıxlığı |
 | GET | `/api/routes/{id}/live` | istifadəçi | Xəttin sıxlığı, avtobuslar, dayanacaqlar üzrə ETA |
 | GET | `/api/stops/{id}/arrivals` | istifadəçi | Dayanacağa yaxınlaşan avtobuslar və ETA |
-| POST | `/api/reports` | istifadəçi | Sıxlıq bildirişi `{route_id, level, bus_id?, stop_id?}` |
+| POST | `/api/reports` | istifadəçi | Sıxlıq bildirişi `{route_id, level, bus_id?, stop_id?, lat?, lon?}`. Cavabda təsdiq nəticəsi və qazanılan xal qaytarılır. |
+| GET | `/api/arrivals?stops=a,b` | istifadəçi | Eyni adlı bir neçə dayanacaq üçün birgə gəliş vaxtları |
+| GET | `/api/rewards/me` | istifadəçi | Xallar, bu günün limiti, pulsuz gedişlər |
+| POST | `/api/rewards/redeem` | istifadəçi | Xalla gediş (BakuBus MMC əməkdaşlığına qədər bağlıdır, 403) |
 | POST | `/api/tracking` | istifadəçi | Canlı GPS: sərnişinin telefonu avtobusun mövqeyini göndərir `{route_id, bus_id, lat, lon, accuracy_m?, speed_kmh?}` |
 | POST | `/api/gps` | cihaz | GPS nöqtəsi `{bus_id, lat, lon, speed_kmh?}` |
 | GET | `/api/operator/overview` | operator | KPI-lar və xətlər üzrə analitika |

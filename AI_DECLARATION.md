@@ -32,6 +32,9 @@ Promptlar azərbaycan dilində yazılıb. Aşağıda sıra ilə real promptları
 | 4 | *“opendata.az portalından götürülmüş məlumatlardır, sistemə əlavə et, hər şey reala uyğun olsun”* (`buslines.kmz`, `dayanacaqlar.csv`) | İdxal skripti yazdı: 233 xətt və 3490 dayanacaq. CSV-də dayanacaq və xətt əlaqəsi olmadığı üçün həndəsi yaxınlıqla (≤ 25 m) bağlama təklif etdi. Backend-i 233 xətt və təxminən 980 avtobus üçün optimallaşdırdı. |
 | 5 | *“Hər hansı peyk API-si ya başqa API vasitəsi ilə hal-hazırda avtobuslar haradadır, onu görək”* | Peyk məlumatının real vaxt izləmə üçün yararsız olduğunu, Bakı üçün açıq real vaxt GPS API-si tapılmadığını izah etdi. Alternativ olaraq crowdsourcing GPS təklif etdi: “Mən bu avtobusdayam” düyməsi ilə sərnişinin telefonu avtobusun GPS-i olur. Komanda bunu qəbul etdi. |
 
+| 6 | *“Mobil görünüş… qarışıqdır… eyni avtobus nömrələrini qruplaşdır… GPS tapılması üçün 30 saniyə çoxdur”* | Mobil interfeysi yenidən qurdu: sabit xəritə, öz daxilində sürüşən panel, nömrə şəbəkəsi və variantların qruplaşdırılması, eyni adlı dayanacaqların birləşdirilməsi. GPS üçün əvvəlcədən isitmə və son nəticənin dərhal istifadəsi tətbiq edildi, gözləmə 10 saniyəyə endirildi. |
+| 7 | *“Anomaliya feedback-ına görə sərnişinlər point qazansın… gündə maksimum 3 feedback… saxta olmadığı yoxlanılsın… BakuBus MMC əməkdaşlığı təsdiqlənərsə işə düşəcəyi bildirilsin”* | Xal sistemi qurdu. Gündəlik 3 bildiriş limiti və iki yoxlama üsulu (GPS ilə yer sübutu və ya müstəqil sərnişin təsdiqi) var. Xal yalnız təsdiqlənmiş bildirişə verilir. Xalla gediş almaq BakuBus MMC əməkdaşlığına qədər bağlıdır. |
+
 ## 4. AI-ın mərhələlər üzrə rolu və insan nəzarəti
 
 | Mərhələ | AI nə etdi | Komanda nə etdi |
@@ -40,7 +43,7 @@ Promptlar azərbaycan dilində yazılıb. Aşağıda sıra ilə real promptları
 | Arxitektura | Qatlı struktur təklif etdi: API → servis → engine → store | Təsdiqlədi. Frontend texnologiyasını özü seçdi (React). |
 | Anomaliya qaydası | “10 dəqiqə ərzində yüksək” şərtini konkret qaydaya çevirdi: ≥ 3 yüksək bildiriş və ≥ 60% pay | Qaydanı qəbul etdi. Hədlər mühit dəyişənləri ilə dəyişdirilə bilir. |
 | Kod | Komandanın tələbləri və təsdiqlədiyi arxitektura əsasında kodu yazdı | Hər mərhələdən sonra nəticəni brauzerdə yoxladı, düzəliş və yeni funksiyalar tələb etdi |
-| Testlər | 50 avtomatik test yazdı və işə saldı | Hamısının keçdiyini yoxladı |
+| Testlər | 56 avtomatik test yazdı və işə saldı | Hamısının keçdiyini yoxladı |
 | Məlumat | KMZ/CSV formatını təhlil etdi, idxal skriptini yazdı | Real məlumatı tapıb təqdim etdi (opendata.az) |
 
 ## 5. Yoxlama zamanı aşkarlanan və düzəldilən problemlər
@@ -54,7 +57,7 @@ Promptlar azərbaycan dilində yazılıb. Aşağıda sıra ilə real promptları
 
 ## 6. AI çıxışının yoxlanması
 
-- **Avtomatik testlər:** 50 test, hamısı keçir (`python -m pytest -q`). Testlər anomaliya qaydasını, 10 dəqiqəlik pəncərəni, dairəvi xətlərdə ETA-nı, GPS-in marşruta bağlanmasını, rolları, şifrə hash-ini, real şəbəkədə simulyasiyanı və telefondan canlı GPS-i yoxlayır.
+- **Avtomatik testlər:** 56 test, hamısı keçir (`python -m pytest -q`). Testlər anomaliya qaydasını, 10 dəqiqəlik pəncərəni, dairəvi xətlərdə ETA-nı, GPS-in marşruta bağlanmasını, rolları, şifrə hash-ini, real şəbəkədə simulyasiyanı, telefondan canlı GPS-i, gündəlik limiti, bildirişlərin təsdiqini və xalları yoxlayır.
 - **Brauzerdə əl ilə yoxlama:** qeydiyyat → xətt seçimi → ETA → sıxlıq bildirişi → operator girişi → pik saat simulyasiyası → avtomatik xəbərdarlıq → ehtiyat avtobusun ayrılması.
 - **Təhlükəsizlik:** şifrələr açıq saxlanılmır (PBKDF2-SHA256, 200 000 iterasiya). Bütün inputlar Pydantic ilə yoxlanılır. Spam qoruması var. Operator endpoint-ləri qorunur.
 

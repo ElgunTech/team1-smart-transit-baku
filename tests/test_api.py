@@ -165,6 +165,58 @@ def test_arrivals_sorted_and_route_live(client, pax):
     assert client.get("/api/stops/nowhere/arrivals", headers=pax).status_code == 404
 
 
+# --- rewards: daily limit, verification, points ------------------------------------------------
+ON_ROUTE = {"lat": 40.4005, "lon": 49.8521}     # next to "Gənclik" on line r1
+FAR_AWAY = {"lat": 40.50, "lon": 49.70}
+
+
+def rewards(client, headers):
+    return client.get("/api/rewards/me", headers=headers).json()
+
+
+def test_daily_limit_is_three_reports(client, clock):
+    creds = {"email": "daily@test.az", "password": "secret1"}
+    client.post("/api/auth/register", json={"name": "Daily", **creds})
+    login = lambda: {"Authorization": f"Bearer {client.post('/api/auth/login', json=creds).json()['token']}"}
+    pax = login()
+    for route in ("r1", "r5", "r13"):
+        assert report(client, pax, route_id=route).status_code == 201
+    fourth = report(client, pax, route_id="r88")
+    assert fourth.status_code == 429 and "Gündə" in fourth.json()["detail"]
+    assert rewards(client, pax)["today_reports"] == 3
+    clock.advance(24 * 3600)                     # next day (the old session has expired)
+    assert report(client, login(), route_id="r88").status_code == 201
+
+
+def test_report_verified_by_gps_earns_points(client, pax):
+    res = report(client, pax, level="medium", **ON_ROUTE).json()
+    assert res["verified"] is True and res["verified_by"] == "gps"
+    assert res["points_awarded"] == config.POINTS_PER_REPORT
+    assert rewards(client, pax)["points"] == config.POINTS_PER_REPORT
+
+
+def test_unverified_report_earns_nothing(client, pax):
+    res = report(client, pax, level="medium", **FAR_AWAY).json()  # not on the route, nobody agrees
+    assert res["verified"] is False and res["points_awarded"] == 0
+    assert rewards(client, pax)["points"] == 0
+
+
+def test_independent_passenger_corroborates_both(client, pax):
+    first = report(client, pax, level="high").json()
+    assert first["verified"] is False
+    other = new_passenger(client)
+    second = report(client, other, level="high").json()
+    assert second["verified"] is True and second["verified_by"] == "crowd"
+    assert rewards(client, pax)["points"] == config.POINTS_PER_REPORT   # the first one is verified too
+    assert rewards(client, other)["points"] == config.POINTS_PER_REPORT
+
+
+def test_redeem_is_disabled_until_partnership(client, pax):
+    res = client.post("/api/rewards/redeem", headers=pax)
+    assert res.status_code == 403 and "BakuBus" in res.json()["detail"]
+    assert rewards(client, pax)["redeem_enabled"] is False
+
+
 def test_multi_stop_arrivals_merge(client, pax):
     single = client.get("/api/stops/may28/arrivals", headers=pax).json()["arrivals"]
     merged = client.get("/api/arrivals", params={"stops": "may28,nizami"}, headers=pax).json()
