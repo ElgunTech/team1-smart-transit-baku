@@ -526,8 +526,8 @@ select {
 @keyframes flow { to { stroke-dashoffset: -32; } }
 .leaflet-tooltip { font: 500 13px/1.4 var(--font); border-radius: 8px; border: 0; box-shadow: var(--shadow); padding: 7px 10px; }
 .leaflet-container { font-family: var(--font); }
-/* muted base map so route colours carry the information */
-.leaflet-tile-pane { filter: grayscale(.9) contrast(.92) brightness(1.06); }
+/* full-colour base map, only slightly softened so route lines stay readable on top */
+.leaflet-tile-pane { filter: saturate(.9) brightness(1.02); }
 
 /* ---------- operator ---------- */
 .ops { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 1560px; margin: 0 auto; }
