@@ -1,9 +1,9 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Bus, Check, Clock3, LocateFixed, MapPin, Search, Users, X } from "lucide-react";
+import { ArrowLeft, ArrowUp, Bus, Check, ChevronDown, ChevronUp, Clock3, LocateFixed, MapPin, Navigation, Search, Users, X } from "lucide-react";
 import LiveTracking from "../components/LiveTracking.jsx";
-import { BaseMap, BusLayer, FitBounds, FlyTo, RouteLine, StopLayer } from "../components/TransitMap.jsx";
-import { currentPosition, distanceToPath } from "../lib/geo.js";
+import { BaseMap, BusLayer, FitBounds, FlyTo, MyLocation, PickOnMap, RouteLine, StopLayer } from "../components/TransitMap.jsx";
+import { currentPosition, distanceToPath, geoError } from "../lib/geo.js";
 import { Eta, LevelPill, RouteBadge, Skeleton } from "../components/ui.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { post, usePolling } from "../lib/api.js";
@@ -33,11 +33,69 @@ const NetworkLines = memo(function NetworkLines({ routes, selected, onSelect }) 
   );
 });
 
+/** "My location" button: watches the device position until switched off. */
+function useMyLocation(toast) {
+  const [fix, setFix] = useState(null);
+  const [on, setOn] = useState(false);
+  const [flyKey, setFlyKey] = useState(0);
+  const watch = useRef(null);
+  const first = useRef(true);
+
+  const stop = () => {
+    if (watch.current != null) navigator.geolocation.clearWatch(watch.current);
+    watch.current = null;
+    setOn(false);
+    setFix(null);
+  };
+  const toggle = () => {
+    if (on) return stop();
+    if (!navigator.geolocation) return toast("Brauzer yer məlumatını dəstəkləmir", "error");
+    setOn(true);
+    first.current = true;
+    watch.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        setFix({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy });
+        if (first.current) {
+          first.current = false;
+          setFlyKey((k) => k + 1);
+          if (pos.coords.accuracy > 1000) {
+            toast(`Yer təxminidir (±${Math.round(pos.coords.accuracy / 1000)} km): cihazda GPS yoxdur`, "error");
+          }
+        }
+      },
+      (e) => {
+        toast(geoError(e), "error");
+        stop();
+      },
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 },
+    );
+  };
+  useEffect(() => stop, []);
+  return { fix, on, toggle, flyKey };
+}
+
 export default function Passenger() {
   const net = useNetwork();
+  const toast = useToast();
   const [tab, setTab] = useState("routes");
   const [routeId, setRouteId] = useState(null);
   const [stopId, setStopId] = useState(null);
+  const [sheetUp, setSheetUp] = useState(false);
+  const [showTop, setShowTop] = useState(false);
+  const [trackFix, setTrackFix] = useState(null);
+  const [pick, setPick] = useState(null); // callback waiting for a map click (test mode)
+  const requestPick = (cb) => {
+    setSheetUp(false);
+    setPick(() => cb);
+  };
+  const locate = useMyLocation(toast);
+  const me = trackFix || locate.fix;
+  const panelRef = useRef(null);
+
+  // a new view starts at the top of the panel
+  useEffect(() => {
+    panelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [tab, routeId, stopId]);
 
   const route = routeId ? net.routesById[routeId] : null;
   const stop = stopId ? net.stopsById[stopId] : null;
@@ -45,6 +103,7 @@ export default function Passenger() {
   const { data: arrivals } = usePolling(stop && tab === "stops" ? `/api/stops/${stop.id}/arrivals` : null);
 
   const selectRoute = (id) => {
+    if (pick) return; // a click while picking a position must not switch the line
     setRouteId(id);
     setTab("routes");
   };
@@ -60,8 +119,12 @@ export default function Passenger() {
     : live?.buses;
 
   return (
-    <main className="passenger">
-      <aside className="panel">
+    <main className={`passenger${sheetUp ? " sheet-up" : ""}`}>
+      <aside className="panel" ref={panelRef} onScroll={(e) => setShowTop(e.currentTarget.scrollTop > 400)}>
+        <button className="sheet-handle" onClick={() => setSheetUp((v) => !v)} aria-label={sheetUp ? "Xəritəni böyüt" : "Paneli böyüt"}>
+          <span className="grip" />
+          {sheetUp ? <><ChevronDown size={15} /> Xəritəni böyüt</> : <><ChevronUp size={15} /> Paneli böyüt</>}
+        </button>
         <div className="tabs" role="tablist">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
@@ -75,7 +138,7 @@ export default function Passenger() {
           {tab === "routes" ? (
             <motion.section key="routes" className="tab-body" initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }} transition={{ duration: 0.18 }}>
               {route ? (
-                <RouteDetail key={route.id} route={route} live={live} onStop={openStop} onBack={() => setRouteId(null)} />
+                <RouteDetail key={route.id} route={route} live={live} onStop={openStop} onBack={() => setRouteId(null)} onFix={setTrackFix} onPickRequest={requestPick} />
               ) : (
                 <RouteBrowser onSelect={selectRoute} />
               )}
@@ -90,9 +153,45 @@ export default function Passenger() {
             </motion.section>
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {showTop && (
+            <motion.button
+              className="to-top"
+              initial={{ opacity: 0, scale: 0.8, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 10 }}
+              onClick={() => panelRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+              aria-label="Yuxarı"
+            >
+              <ArrowUp size={18} />
+            </motion.button>
+          )}
+        </AnimatePresence>
       </aside>
 
+      <div className={`map-wrap${pick ? " picking" : ""}`}>
+      <AnimatePresence>
+        {pick && (
+          <motion.div className="pick-banner" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <span className="live-dot" /> Test rejimi: marşrut xəttinin yaxınlığına toxunun
+            <button onClick={() => setPick(null)} aria-label="Ləğv et"><X size={15} /></button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <button
+        className={`locate-btn${me ? " on" : ""}`}
+        onClick={locate.toggle}
+        title={locate.on ? "Yerimi gizlət" : "Mənim yerim"}
+        aria-pressed={locate.on}
+      >
+        <Navigation size={18} />
+        <span>{locate.on ? "Yerimi gizlət" : "Mənim yerim"}</span>
+      </button>
       <BaseMap className="map" bounds={allPoints}>
+        <MyLocation me={me} />
+        {pick && <PickOnMap onPick={(p) => { setPick(null); pick(p); }} />}
+        {me && <FlyTo center={[me.lat, me.lon]} zoom={15} trigger={`${locate.flyKey}-${Boolean(trackFix)}`} />}
         <NetworkLines routes={net.routes} selected={route?.id} onSelect={selectRoute} />
         {route && <RouteLine route={route} weight={6} opacity={0.95} flow />}
         {route && <StopLayer stops={routeStops} onClick={openStop} radius={4} />}
@@ -101,6 +200,7 @@ export default function Passenger() {
         {route && tab === "routes" && <FitBounds points={route.path} deps={[route.id]} />}
         {stop && tab === "stops" && <FlyTo center={[stop.lat, stop.lon]} zoom={16} />}
       </BaseMap>
+      </div>
     </main>
   );
 }
@@ -177,7 +277,7 @@ function RouteBrowser({ onSelect }) {
   );
 }
 
-function RouteDetail({ route, live, onStop, onBack }) {
+function RouteDetail({ route, live, onStop, onBack, onFix, onPickRequest }) {
   return (
     <motion.div className="stack" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
       <button className="back" onClick={onBack}><ArrowLeft size={16} /> Bütün xətlər</button>
@@ -210,7 +310,7 @@ function RouteDetail({ route, live, onStop, onBack }) {
         </div>
       </div>
       <ReportBox route={route} buses={live?.buses || []} />
-      <LiveTracking route={route} buses={live?.buses || []} />
+      <LiveTracking route={route} buses={live?.buses || []} onFix={onFix} onPickRequest={onPickRequest} />
     </motion.div>
   );
 }

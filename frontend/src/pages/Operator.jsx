@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Activity, AlertTriangle, Bus, CheckCircle2, Flame, MessageSquareText, Search, Siren, X, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUp, Bus, CheckCircle2, Flame, MessageSquareText, Search, Siren, X, Zap } from "lucide-react";
 import { BaseMap, RouteLine } from "../components/TransitMap.jsx";
 import { AnimatedNumber, LevelPill, RouteBadge, Skeleton } from "../components/ui.jsx";
 import { useToast } from "../components/Toast.jsx";
@@ -57,6 +57,13 @@ export default function Operator() {
     seen.current = new Set(open);
     document.title = (open.length ? `(${open.length}) ` : "") + "Operator paneli · SmartTransit Bakı";
   }, [alerts]);
+
+  const [showTop, setShowTop] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 500);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const act = async (key, path, okText) => {
     setBusy(key);
@@ -310,6 +317,21 @@ export default function Operator() {
           </section>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showTop && (
+          <motion.button
+            className="to-top fixed"
+            initial={{ opacity: 0, scale: 0.8, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 10 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            aria-label="Yuxarı"
+          >
+            <ArrowUp size={18} />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

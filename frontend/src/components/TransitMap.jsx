@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import L from "leaflet";
-import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { Circle, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { LEVEL_AZ } from "../lib/format.js";
 
 const BAKU = [40.392, 49.855];
@@ -15,6 +15,7 @@ export function BaseMap({ children, className = "map", bounds }) {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Xətlər və dayanacaqlar: <a href="https://opendata.az">opendata.az</a>'
       />
       <ZoomAnimGuard />
+      <AutoResize />
       {children}
     </MapContainer>
   );
@@ -38,6 +39,56 @@ function ZoomAnimGuard() {
   return null;
 }
 
+// The map box changes size on mobile (sheet expanded / collapsed); keep tiles in sync.
+function AutoResize() {
+  const map = useMap();
+  useEffect(() => {
+    const ro = new ResizeObserver(() => map.invalidateSize({ pan: false }));
+    ro.observe(map.getContainer());
+    return () => ro.disconnect();
+  }, [map]);
+  return null;
+}
+
+const meIcon = L.divIcon({
+  className: "me-icon",
+  html: '<div class="me-pin"><span></span></div>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+});
+
+/** Calls onPick({lat, lon}) on the next map click (test mode position picking). */
+export function PickOnMap({ onPick }) {
+  useMapEvents({
+    click(e) {
+      if (onPick) onPick({ lat: e.latlng.lat, lon: e.latlng.lng });
+    },
+  });
+  return null;
+}
+
+/** The user's own position: pulsing blue dot with an accuracy circle, unlike bus pins. */
+export function MyLocation({ me }) {
+  if (!me) return null;
+  return (
+    <>
+      {me.accuracy > 0 && me.accuracy <= 2000 && (
+        <Circle
+          center={[me.lat, me.lon]}
+          radius={me.accuracy}
+          pathOptions={{ color: "#1c7ed6", weight: 1, fillColor: "#339af0", fillOpacity: 0.12, interactive: false }}
+        />
+      )}
+      <Marker position={[me.lat, me.lon]} icon={meIcon} zIndexOffset={2000}>
+        <Tooltip direction="top" offset={[0, -12]}>
+          <b>Siz buradasınız</b>
+          {me.accuracy ? ` · ±${Math.round(me.accuracy)} m` : ""}
+        </Tooltip>
+      </Marker>
+    </>
+  );
+}
+
 export function FitBounds({ points, padding = 40, deps = [] }) {
   const map = useMap();
   useEffect(() => {
@@ -46,11 +97,11 @@ export function FitBounds({ points, padding = 40, deps = [] }) {
   return null;
 }
 
-export function FlyTo({ center, zoom = 15 }) {
+export function FlyTo({ center, zoom = 15, trigger }) {
   const map = useMap();
   useEffect(() => {
     if (center) map.flyTo(center, Math.max(map.getZoom(), zoom), { duration: 0.8 });
-  }, [center?.[0], center?.[1]]);
+  }, trigger === undefined ? [center?.[0], center?.[1]] : [trigger]);
   return null;
 }
 
