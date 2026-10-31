@@ -1,0 +1,16 @@
+services:
+  smart-transit:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      WINDOW_MINUTES: "10"
+      HIGH_MIN_REPORTS: "3"
+      HIGH_SHARE: "0.6"
+      OPERATOR_EMAIL: "operator@smarttransit.az"
+      OPERATOR_PASSWORD: "operator123"
+    volumes:
+      - transit-data:/app/data
+
+volumes:
+  transit-data:
