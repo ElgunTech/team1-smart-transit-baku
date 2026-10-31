@@ -59,15 +59,15 @@ Hər problem test və ya real sınaq zamanı aşkarlandı və yarış müddətin
 | İdxal 239 xəttdən yalnız 27-ni saxladı | Skriptin statistikası | Səbəb: qapalı xətlərdə başlanğıc və son nöqtə eynidir, sadələşdirmə alqoritmi bütün nöqtələri silirdi. Düzəliş edildi, nəticə 233 xətt oldu. |
 | İki test 429 qaytardı | Test nəticəsi | Kod yox, testin özü səhv idi: eyni sərnişin ID-si təkrar istifadə olunurdu, spam qoruması isə düzgün işləyirdi. Testə unikal ID verildi. |
 | Kompüterdə GPS çipi olmadığı üçün yer ±50 km dəqiqliklə gəlirdi | Komandanın kompüterdə sınağı | Aydın izah mesajı və nümayiş üçün işarələnmiş “test rejimi” əlavə edildi |
-| Telefonda GPS gec tapılırdı | Komandanın telefonda sınağı | GPS xətt açılan kimi fonda hazırlanır, son nəticə dərhal istifadə olunur, gözləmə 10 saniyəyə endirildi |
-| Mobil görünüşdə uzun siyahılar və təkrarlanan adlar | Komandanın telefonda sınağı | Nömrə şəbəkəsi, variant və dayanacaq qrupları, yığcam panel tətbiq edildi |
+| Telefonda GPS gec tapılırdı | Komandanın Chrome Telefon Artırması sınağı | GPS xətt açılan kimi fonda hazırlanır, son nəticə dərhal istifadə olunur, gözləmə 10 saniyəyə endirildi |
+| Mobil görünüşdə uzun siyahılar və təkrarlanan adlar | Komandanın Chrome Telefon Artırması sınağı | Nömrə şəbəkəsi, variant və dayanacaq qrupları, yığcam panel tətbiq edildi |
 | Xəritədəki “yaxınlaşdırın” düyməsi reaksiya vermirdi | Brauzerdə yoxlama zamanı | Xəritə kitabxanasının klik kilidi düymənin hadisəsini bloklayırdı, kilid çıxarıldı |
 
 ## 6. AI çıxışının yoxlanması
 
 - **Avtomatik testlər:** 57 test, hamısı keçir (`python -m pytest -q`). Testlər anomaliya qaydasını, 10 dəqiqəlik pəncərəni, dairəvi xətlərdə ETA-nı, GPS-in marşruta bağlanmasını, rolları, şifrə hash-ini, real şəbəkədə simulyasiyanı, telefondan canlı GPS-i, gündəlik limiti, bildirişlərin təsdiqini və xalları yoxlayır.
 - **Brauzerdə əl ilə yoxlama:** qeydiyyat → xətt seçimi → ETA → sıxlıq bildirişi → operator girişi → pik saat simulyasiyası → avtomatik xəbərdarlıq → ehtiyat avtobusun ayrılması.
-- **Telefonda real sınaq:** tətbiq HTTPS ilə açıldı, mobil görünüş və telefonun GPS-i komanda tərəfindən sınaqdan keçirildi.
+- **Chrome Telefon Artırmasında real sınaq:** tətbiq HTTPS ilə açıldı, mobil görünüş və telefonun GPS-i komanda tərəfindən sınaqdan keçirildi.
 - **Sıfırdan quraşdırma:** layihə GitHub-dan təmiz qovluğa klonlandı və README təlimatı ilə quraşdırıldı. Hər şey ilk cəhddə işlədi.
 - **Təhlükəsizlik:** şifrələr açıq saxlanılmır (PBKDF2-SHA256, 200 000 iterasiya). Bütün inputlar Pydantic ilə yoxlanılır. Spam qoruması var. Operator endpoint-ləri qorunur.
 
@@ -80,8 +80,6 @@ Hər problem test və ya real sınaq zamanı aşkarlandı və yarış müddətin
 | Məlikova Fatimə Xəyal qızı (Səbət 3) | AI inteqrasiyası və sənədləşmə | AI ilə vahid (unit) testlərin yazılması, sənədlərin hazırlanması, yeni funksiyaların araşdırılması |
 
 ## 8. Öyrəndiklərimiz və növbəti addımlar
-
-- **AI + insan nəzarəti birlikdə ən yaxşı nəticəni verir.** AI kodu sürətlə yazdı, komandanın brauzerdə və telefonda apardığı sınaqlar isə interfeysi və GPS-i real istifadəyə hazırladı.
 - **Açıq məlumatı tam istifadə etdik.** Mənbədə dayanacaq və xətt əlaqəsi olmasa da, alqoritmlə dayanacaqların 97%-ni xətlərə bağladıq. Rəsmi marşrut cədvəli ilə bu 100%-ə çatdırıla bilər.
 - **Növbəti addım: real GPS və tərəfdaşlıq.** Sistem rəsmi GPS axınına (`/api/gps`) və bilet sisteminə qoşulmağa hazırdır. BakuBus MMC ilə əməkdaşlıq olarsa, xalla gediş funksiyası və real avtobus mövqeləri aktivləşəcək.
 
