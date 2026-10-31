@@ -257,6 +257,37 @@ h2 { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
   background: var(--surface-2); color: var(--accent); font-weight: 700; font-size: 13.5px;
 }
 .table-more:hover { background: var(--accent-soft); }
+.chip-btn {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; margin-top: -4px;
+  padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line-2); background: var(--surface);
+  font-size: 13px; font-weight: 700; color: var(--accent); transition: background .15s, border-color .15s;
+}
+.chip-btn:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-2); }
+.chip-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.spinner.dark { width: 14px; height: 14px; border-color: var(--line); border-top-color: var(--accent); }
+.near-tag { color: var(--accent); font-weight: 700; }
+
+.live-box { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--surface); transition: border-color .3s, background .3s; }
+.live-box.active { border-color: #9fd8b0; background: #f3fbf5; }
+.live-box p { margin: 2px 0 12px; font-size: 13px; color: var(--muted); }
+.live-box-head { display: flex; gap: 12px; align-items: flex-start; }
+.live-box-icon { width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.live-box.active .live-box-icon { background: #d3f0dc; color: var(--low); animation: blink 1.6s ease-in-out infinite; }
+.live-status { display: flex; align-items: center; gap: 12px; }
+.live-status .live-dot { flex-shrink: 0; }
+.kpi-sub { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); font-weight: 600; margin-top: 4px; }
+.kpi-sub .live-dot { background: var(--unknown); }
+.kpi-sub .live-dot::after { display: none; }
+.kpi-sub.on { color: var(--low); }
+.kpi-sub.on .live-dot { background: #40c057; }
+.kpi-sub.on .live-dot::after { display: block; }
+.tip-live { color: var(--low); font-weight: 700; }
+.bus-pin.live { box-shadow: 0 0 0 3px #40c057, 0 2px 6px rgba(0,0,0,.3); }
+.bus-pin.live::before {
+  content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 2px solid #40c057;
+  animation: ping 1.4s ease-out infinite;
+}
+
 .timeline { list-style: none; margin: 0; padding: 0; }
 .timeline li {
   position: relative; display: flex; justify-content: space-between; align-items: center;

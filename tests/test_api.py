@@ -179,6 +179,40 @@ def test_gps_rejects_far_points_and_unknown_bus(client):
     assert client.post("/api/gps", json={"bus_id": "ghost", "lat": 40.4, "lon": 49.85}).status_code == 404
 
 
+def tracking(client, headers, **extra):
+    body = {"route_id": "r1", "bus_id": "r1-b1", "lat": 40.4005, "lon": 49.8521, "accuracy_m": 15, **extra}
+    return client.post("/api/tracking", json=body, headers=headers)
+
+
+def test_phone_tracking_makes_bus_live(client, pax, clock):
+    assert tracking(client, {}).status_code == 401
+    res = tracking(client, pax)
+    assert res.status_code == 202
+    bus = next(b for b in client.get("/api/buses", params={"route_id": "r1"}, headers=pax).json() if b["id"] == "r1-b1")
+    assert bus["live"] is True and bus["lat"] == pytest.approx(40.4005)
+    clock.advance(config.LIVE_TTL_SEC + 1)
+    bus = next(b for b in client.get("/api/buses", params={"route_id": "r1"}, headers=pax).json() if b["id"] == "r1-b1")
+    assert bus["live"] is False
+
+
+@pytest.mark.parametrize("extra", [
+    {"accuracy_m": 900},                       # too imprecise
+    {"lat": 40.50, "lon": 49.70},              # not on the route
+    {"bus_id": "r5-b1"},                       # bus of another line
+])
+def test_phone_tracking_rejects_bad_fixes(client, pax, extra):
+    assert tracking(client, pax, **extra).status_code == 422
+
+
+def test_simulator_does_not_move_live_bus(client, pax):
+    from app.simulator import Simulator
+    tracking(client, pax)
+    svc = client.app.state.service
+    before = svc.store.get_bus("r1-b1")["pos_m"]
+    Simulator(svc).step(2)
+    assert svc.store.get_bus("r1-b1")["pos_m"] == before
+
+
 # --- operator module: anomaly alerts ---------------------------------------------------------
 def test_anomaly_creates_single_alert_with_donor(client, ops):
     flood(client, "r5", n=3, level="low")       # r5 is quiet -> can lend a bus

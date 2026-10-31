@@ -7,7 +7,7 @@ Bakıda pik saatlarda bəzi avtobus xətləri həddindən artıq dolu olur, bəz
 
 | Modul | Kim üçün | Nə edir |
 |---|---|---|
-| **Sərnişin modulu** | Qeydiyyatdan keçmiş sərnişin | Xətt və ya dayanacaq seçir. Avtobusların real vaxt mövqeyini və gəliş vaxtını (ETA) görür. Avtobusun sıxlığını (Aşağı / Orta / Yüksək) bildirir. |
+| **Sərnişin modulu** | Qeydiyyatdan keçmiş sərnişin | Xətt və ya dayanacaq seçir, yaxınlığından keçən xətləri tapır. Avtobusların real vaxt mövqeyini və gəliş vaxtını (ETA) görür. Avtobusun sıxlığını (Aşağı / Orta / Yüksək) bildirir. **“Mən bu avtobusdayam”** düyməsi ilə telefonunun GPS-ini avtobusun canlı mövqeyi kimi paylaşır. |
 | **Operator modulu + analitika** | Operator / dövlət qurumu | Sərnişin bildirişləri və GPS əsasında sıxlıq xəritəsi və cədvəli görür. Anomaliya olduqda avtomatik **əlavə avtobus tövsiyəsi** alır və bir kliklə ehtiyat avtobus ayırır. |
 
 **Real məlumat:** sistem [opendata.az](https://opendata.az) portalından götürülmüş Bakı avtobus şəbəkəsi ilə işləyir: **233 xətt** (real küçə həndəsəsi, `buslines.kmz`) və **3490 dayanacaq** (`dayanacaqlar.csv`). Xətlərdə ümumilikdə təxminən 980 avtobus simulyasiya olunur.
@@ -65,7 +65,7 @@ npm run build      # build-i ../static qovluğuna yazır
 python -m pytest -q
 ```
 
-45 avtomatik test var. Onlar analitika engine-ini, anomaliya qaydasını, ETA hesablamasını (dairəvi xətlər daxil), GPS-in marşruta bağlanmasını, autentifikasiyanı, rolları, bütün API axınlarını və real opendata şəbəkəsinin yüklənib simulyasiya olunmasını yoxlayır. API testləri kiçik demo şəbəkəsində işləyir və saat saxta saatla (fake clock) idarə olunur, ona görə nəticə deterministikdir.
+50 avtomatik test var. Onlar analitika engine-ini, anomaliya qaydasını, ETA hesablamasını (dairəvi xətlər daxil), GPS-in marşruta bağlanmasını, autentifikasiyanı, rolları, bütün API axınlarını və real opendata şəbəkəsinin yüklənib simulyasiya olunmasını yoxlayır. API testləri kiçik demo şəbəkəsində işləyir və saat saxta saatla (fake clock) idarə olunur, ona görə nəticə deterministikdir.
 
 ### Açıq məlumatın yenidən idxalı
 
@@ -130,6 +130,17 @@ Bütün hədlər mühit dəyişənləri ilə dəyişdirilir: `WINDOW_MINUTES`, `
 
 ---
 
+### Canlı GPS (crowdsourcing)
+
+Bakı avtobusları üçün açıq real vaxt GPS API-si yoxdur. Peyk məlumatı isə real vaxt izləmə üçün yararsızdır. Ona görə sistem avtobusun GPS-ini sərnişinin özündən alır.
+
+1. Sərnişin **“Mən bu avtobusdayam”** düyməsini basır. Telefonun yeri hər 5 saniyədən bir göndərilir.
+2. Backend nöqtəni yoxlayır: dəqiqlik ≤ 200 m, xətdən məsafə ≤ 400 m, avtobus həmin xəttə aid olmalıdır.
+3. Nöqtə marşrut xəttinə bağlanır və avtobus 30 saniyəlik **canlı** kimi işarələnir. Canlı avtobusu simulyator hərəkət etdirmir.
+4. Xəritədə canlı avtobus yaşıl halqa ilə göstərilir. Operator panelində canlı GPS ilə izlənən avtobusların sayı görünür.
+
+Eyni mexanizm rəsmi GPS axını (`/api/gps`) üçün də işləyir. Qeyd: brauzer GPS-i yalnız təhlükəsiz kontekstdə (HTTPS və ya localhost) verir. Telefonda sınamaq üçün tətbiq HTTPS ilə açılmalıdır.
+
 ## 3. API
 
 Ətraflı interaktiv sənəd (Swagger) server işləyərkən buradadır: **http://localhost:8000/docs**
@@ -144,6 +155,7 @@ Bütün hədlər mühit dəyişənləri ilə dəyişdirilir: `WINDOW_MINUTES`, `
 | GET | `/api/routes/{id}/live` | istifadəçi | Xəttin sıxlığı, avtobuslar, dayanacaqlar üzrə ETA |
 | GET | `/api/stops/{id}/arrivals` | istifadəçi | Dayanacağa yaxınlaşan avtobuslar və ETA |
 | POST | `/api/reports` | istifadəçi | Sıxlıq bildirişi `{route_id, level, bus_id?, stop_id?}` |
+| POST | `/api/tracking` | istifadəçi | Canlı GPS: sərnişinin telefonu avtobusun mövqeyini göndərir `{route_id, bus_id, lat, lon, accuracy_m?, speed_kmh?}` |
 | POST | `/api/gps` | cihaz | GPS nöqtəsi `{bus_id, lat, lon, speed_kmh?}` |
 | GET | `/api/operator/overview` | operator | KPI-lar və xətlər üzrə analitika |
 | GET | `/api/operator/alerts?status=` | operator | Xəbərdarlıqlar |

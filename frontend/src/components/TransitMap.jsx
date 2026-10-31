@@ -54,10 +54,10 @@ export function FlyTo({ center, zoom = 15 }) {
   return null;
 }
 
-function busIcon(route, crowd, selected) {
+function busIcon(route, crowd, selected, live) {
   return L.divIcon({
     className: "bus-icon",
-    html: `<div class="bus-pin${crowd === "high" ? " crowd-high" : ""}${selected ? " selected" : ""}" style="--c:${route.color}">
+    html: `<div class="bus-pin${crowd === "high" ? " crowd-high" : ""}${selected ? " selected" : ""}${live ? " live" : ""}" style="--c:${route.color}">
              <span>${route.number}</span>
            </div>`,
     iconSize: [30, 30],
@@ -66,7 +66,7 @@ function busIcon(route, crowd, selected) {
 }
 
 function BusMarker({ bus, route, dimmed, onClick }) {
-  const icon = useMemo(() => busIcon(route, bus.crowd_level, !dimmed), [route, bus.crowd_level, dimmed]);
+  const icon = useMemo(() => busIcon(route, bus.crowd_level, !dimmed, bus.live), [route, bus.crowd_level, dimmed, bus.live]);
   return (
     <Marker
       position={[bus.lat, bus.lon]}
@@ -77,6 +77,7 @@ function BusMarker({ bus, route, dimmed, onClick }) {
     >
       <Tooltip direction="top" offset={[0, -14]}>
         <b>Xətt {route.number}</b> · {bus.plate}
+        {bus.live && <span className="tip-live"> · canlı GPS</span>}
         <br />
         Sıxlıq: {LEVEL_AZ[bus.crowd_level]}
         {typeof bus.speed_kmh === "number" && ` · ${bus.speed_kmh} km/s`}

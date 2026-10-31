@@ -40,6 +40,15 @@ class ReportIn(BaseModel):
     stop_id: str | None = None
 
 
+class TrackingIn(BaseModel):
+    route_id: str
+    bus_id: str
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    speed_kmh: float | None = Field(default=None, ge=0, le=120)
+    accuracy_m: float | None = Field(default=None, ge=0)
+
+
 class GpsIn(BaseModel):
     bus_id: str
     lat: float = Field(ge=-90, le=90)
@@ -130,6 +139,13 @@ def stop_arrivals(stop_id: str, request: Request):
 def create_report(body: ReportIn, request: Request, user: dict = Depends(current_user)):
     # The account id is the reporter identity: one report per line per cooldown.
     return _svc(request).submit_report(body.route_id, body.level, f"user-{user['id']}", body.bus_id, body.stop_id)
+
+
+@router.post("/tracking", status_code=202)
+def phone_tracking(body: TrackingIn, request: Request, user: dict = Depends(current_user)):
+    """'I'm on this bus': the passenger's phone location becomes the bus GPS."""
+    return _svc(request).track_from_phone(body.route_id, body.bus_id, body.lat, body.lon,
+                                          body.speed_kmh, body.accuracy_m)
 
 
 @router.post("/gps", status_code=202)

@@ -34,6 +34,12 @@ class TransitService:
         self.store = store
         self.network = network
         self.clock = clock
+        # bus_id -> time of the last real GPS fix; the simulator leaves these buses alone
+        self._live: dict[str, float] = {}
+
+    def is_live(self, bus_id: str, now: float | None = None) -> bool:
+        now = self.clock() if now is None else now
+        return now - self._live.get(bus_id, float("-inf")) <= config.LIVE_TTL_SEC
 
     # --- helpers ---------------------------------------------------------------
     def _route(self, route_id: str):
@@ -64,14 +70,14 @@ class TransitService:
                 by_bus[r["bus_id"]].append((r["level"], r["ts"]))
         return {bid: engine.compute_congestion(rows, now).level for bid, rows in by_bus.items()}
 
-    @staticmethod
-    def _bus_view(bus: dict, route_level: str, crowd: dict[str, str]) -> dict:
+    def _bus_view(self, bus: dict, route_level: str, crowd: dict[str, str]) -> dict:
         return {
             "id": bus["id"], "route_id": bus["route_id"], "plate": bus["plate"],
             "lat": round(bus["lat"], 6), "lon": round(bus["lon"], 6),
             "direction": bus["direction"], "speed_kmh": round(bus["speed_kmh"], 1),
             "updated_at": bus["updated_at"],
             "crowd_level": crowd.get(bus["id"], route_level),
+            "live": self.is_live(bus["id"]),
         }
 
     # --- network -----------------------------------------------------------------
@@ -149,8 +155,23 @@ class TransitService:
         self.store.upsert_bus({**bus, "lat": lat, "lon": lon, "pos_m": pos, "direction": direction,
                                "speed_kmh": speed_kmh, "updated_at": now})
         self.store.add_ping(bus_id, lat, lon, speed_kmh, now)
+        self._live[bus_id] = now
         return {"bus_id": bus_id, "pos_m": round(pos, 1), "snap_offset_m": round(offset, 1),
                 "direction": direction}
+
+    def track_from_phone(self, route_id: str, bus_id: str, lat: float, lon: float,
+                         speed_kmh: float | None, accuracy_m: float | None) -> dict:
+        """A passenger on board shares the phone location as the bus GPS."""
+        self._route(route_id)
+        bus = self.store.get_bus(bus_id)
+        if bus is None or bus["route_id"] != route_id:
+            raise InvalidInput("Avtobus bu xəttə aid deyil")
+        if accuracy_m is not None and accuracy_m > config.MAX_GPS_ACCURACY_M:
+            raise InvalidInput(f"GPS dəqiqliyi zəifdir ({round(accuracy_m)} m). Açıq yerdə yenidən cəhd edin.")
+        try:
+            return self.ingest_gps(bus_id, lat, lon, speed_kmh)
+        except InvalidInput as exc:
+            raise InvalidInput(f"Siz bu xəttin marşrutunda deyilsiniz: {exc}") from exc
 
     def buses(self, route_id: str | None = None) -> list[dict]:
         now = self.clock()
@@ -349,6 +370,7 @@ class TransitService:
             "window_minutes": config.WINDOW_SEC // 60,
             "totals": {
                 "active_buses": sum(r["buses"] for r in rows),
+                "live_buses": sum(1 for bid in list(self._live) if self.is_live(bid, now)),
                 "routes": len(rows),
                 "reports_window": sum(r["total_reports"] for r in rows),
                 "open_alerts": len(open_by_route),

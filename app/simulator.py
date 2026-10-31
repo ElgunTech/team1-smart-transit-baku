@@ -41,8 +41,8 @@ class Simulator:
         buses = svc.store.list_buses()
         for bus in buses:
             route = svc.network.route(bus["route_id"])
-            if route is None:
-                continue
+            if route is None or svc.is_live(bus["id"]):
+                continue  # buses with a real GPS fix are not simulated
             target = SPEED_BY_LEVEL[levels.get(route.id, "unknown")] * self.rng.uniform(0.8, 1.2)
             speed = bus["speed_kmh"] * 0.7 + target * 0.3
             direction = bus["direction"]

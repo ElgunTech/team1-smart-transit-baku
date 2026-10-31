@@ -1,7 +1,9 @@
 import { memo, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Bus, Check, Clock3, MapPin, Search, Users } from "lucide-react";
+import { ArrowLeft, Bus, Check, Clock3, LocateFixed, MapPin, Search, Users, X } from "lucide-react";
+import LiveTracking from "../components/LiveTracking.jsx";
 import { BaseMap, BusLayer, FitBounds, FlyTo, RouteLine, StopLayer } from "../components/TransitMap.jsx";
+import { currentPosition, distanceToPath } from "../lib/geo.js";
 import { Eta, LevelPill, RouteBadge, Skeleton } from "../components/ui.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { post, usePolling } from "../lib/api.js";
@@ -103,14 +105,41 @@ export default function Passenger() {
   );
 }
 
+const NEARBY_M = 400;
+
 function RouteBrowser({ onSelect }) {
   const net = useNetwork();
+  const toast = useToast();
   const [q, setQ] = useState("");
+  const [near, setNear] = useState(null); // { routeId: distance } around the user
+  const [locating, setLocating] = useState(false);
+
   const routes = useMemo(() => {
     const needle = norm(q.trim());
-    if (!needle) return net.routes;
-    return net.routes.filter((r) => norm(r.number).startsWith(needle) || norm(r.name).includes(needle));
-  }, [q, net.routes]);
+    let list = net.routes;
+    if (near) list = list.filter((r) => near[r.id] != null).sort((a, b) => near[a.id] - near[b.id]);
+    if (needle) list = list.filter((r) => norm(r.number).startsWith(needle) || norm(r.name).includes(needle));
+    return list;
+  }, [q, net.routes, near]);
+
+  const findNearby = async () => {
+    setLocating(true);
+    try {
+      const pos = await currentPosition();
+      const { latitude, longitude } = pos.coords;
+      const found = {};
+      for (const r of net.routes) {
+        const d = distanceToPath(latitude, longitude, r.path);
+        if (d <= NEARBY_M) found[r.id] = Math.round(d);
+      }
+      setNear(found);
+      toast(`Yaxınlığınızdan ${Object.keys(found).length} xətt keçir`);
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setLocating(false);
+    }
+  };
 
   return (
     <>
@@ -118,6 +147,15 @@ function RouteBrowser({ onSelect }) {
         <Search size={16} />
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Xətt nömrəsi və ya dayanacaq adı…" autoComplete="off" />
       </label>
+      {near ? (
+        <button className="chip-btn active" onClick={() => setNear(null)}>
+          <LocateFixed size={15} /> Yaxınlığımdakı xətlər ({NEARBY_M} m) <X size={14} />
+        </button>
+      ) : (
+        <button className="chip-btn" onClick={findNearby} disabled={locating}>
+          {locating ? <span className="spinner dark" /> : <LocateFixed size={15} />} Yaxınlığımdakı xətlər
+        </button>
+      )}
       <div className="list-meta">{routes.length} xətt · mənbə: opendata.az</div>
       <ul className="route-list">
         {routes.slice(0, 120).map((r, i) => (
@@ -128,6 +166,7 @@ function RouteBrowser({ onSelect }) {
               <div className="meta">
                 <span>{r.stops.length} dayanacaq</span>
                 <span>{(r.length_m / 1000).toFixed(1)} km{r.loop ? " · dairəvi" : ""}</span>
+                {near?.[r.id] != null && <span className="near-tag">{near[r.id]} m</span>}
               </div>
             </div>
           </motion.li>
@@ -171,6 +210,7 @@ function RouteDetail({ route, live, onStop, onBack }) {
         </div>
       </div>
       <ReportBox route={route} buses={live?.buses || []} />
+      <LiveTracking route={route} buses={live?.buses || []} />
     </motion.div>
   );
 }

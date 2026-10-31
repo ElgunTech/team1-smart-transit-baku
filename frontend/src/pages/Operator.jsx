@@ -12,7 +12,7 @@ import { Tooltip } from "react-leaflet";
 const SEVERITY = { unknown: 0, low: 1, medium: 2, high: 3 };
 const ROW_LIMIT = 12;
 
-function Kpi({ icon: Icon, label, value, alarm, delay }) {
+function Kpi({ icon: Icon, label, value, alarm, delay, sub }) {
   return (
     <motion.div
       className={`kpi${alarm ? " alarm" : ""}`}
@@ -25,6 +25,7 @@ function Kpi({ icon: Icon, label, value, alarm, delay }) {
         <span className="kpi-icon"><Icon size={17} /></span>
       </div>
       <div className="kpi-value">{value == null ? "—" : <AnimatedNumber value={value} />}</div>
+      {sub}
     </motion.div>
   );
 }
@@ -86,7 +87,13 @@ export default function Operator() {
   return (
     <main className="ops">
       <section className="kpis">
-        <Kpi icon={Bus} label="Xətdə olan avtobuslar" value={t?.active_buses} delay={0} />
+        <Kpi
+          icon={Bus}
+          label="Xətdə olan avtobuslar"
+          value={t?.active_buses}
+          delay={0}
+          sub={<div className={`kpi-sub${t?.live_buses ? " on" : ""}`}><span className="live-dot" /> {t?.live_buses ?? 0} canlı GPS (sərnişin telefonu)</div>}
+        />
         <Kpi icon={MessageSquareText} label={`Bildirişlər (son ${win} dəq)`} value={t?.reports_window} delay={0.05} />
         <Kpi icon={Flame} label="Yüksək sıxlıqlı xətlər" value={t?.high_routes} delay={0.1} />
         <Kpi icon={Siren} label="Açıq xəbərdarlıqlar" value={t?.open_alerts} alarm={t?.open_alerts > 0} delay={0.15} />
