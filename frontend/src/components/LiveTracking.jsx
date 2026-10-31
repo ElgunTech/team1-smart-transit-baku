@@ -6,7 +6,9 @@ import { geoError, snapToPath } from "../lib/geo.js";
 import { useToast } from "./Toast.jsx";
 
 const SEND_EVERY_MS = 5000;
-const MAX_ACCURACY_M = 200; // same limit as the backend
+const MAX_ACCURACY_M = 300; // same limit as the backend; the fix is snapped onto the route anyway
+const GPS_WAIT_MS = 10000;
+const FRESH_FIX_MS = 15000; // a warm fix this recent is used immediately
 
 /**
  * "I'm on this bus": streams the phone location as the bus GPS while active.
@@ -20,13 +22,19 @@ export default function LiveTracking({ route, buses, onFix = () => {}, onPickReq
   const [manual, setManual] = useState(false);
   const [weak, setWeak] = useState(null); // accuracy in metres when the device fix is too coarse
   const [status, setStatus] = useState(null); // { accuracy, sentAt, offset }
+  const [searching, setSearching] = useState(null); // accuracy of the coarse fix while waiting for GPS
   const watchId = useRef(null);
   const timer = useRef(null);
   const lastSent = useRef(0);
+  const bestAccuracy = useRef(Infinity);
+  const gotPrecise = useRef(false);
 
   const clear = () => {
     if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current);
-    if (timer.current) clearInterval(timer.current);
+    if (timer.current) {
+      clearInterval(timer.current);
+      clearTimeout(timer.current);
+    }
     watchId.current = null;
     timer.current = null;
   };
@@ -40,6 +48,22 @@ export default function LiveTracking({ route, buses, onFix = () => {}, onPickReq
   };
 
   useEffect(() => stop, [route.id]);
+
+  // Warm up the GPS as soon as the line is open (only if permission was already
+  // granted, so no prompt appears): by the time the user taps "share", a fix is ready.
+  const warm = useRef(null);
+  useEffect(() => {
+    let id = null;
+    let cancelled = false;
+    navigator.permissions?.query({ name: "geolocation" }).then((p) => {
+      if (cancelled || p.state !== "granted") return;
+      id = navigator.geolocation.watchPosition((pos) => { warm.current = pos; }, () => {}, { enableHighAccuracy: true, maximumAge: 5000 });
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      if (id != null) navigator.geolocation.clearWatch(id);
+    };
+  }, [route.id]);
 
   const send = async (lat, lon, accuracy, speed) => {
     try {
@@ -71,27 +95,46 @@ export default function LiveTracking({ route, buses, onFix = () => {}, onPickReq
     }
     setWeak(null);
     setActive(true);
+    setSearching(null);
     lastSent.current = 0;
-    watchId.current = navigator.geolocation.watchPosition(
-      (pos) => {
+    bestAccuracy.current = Infinity;
+    gotPrecise.current = false;
+    // Phones report a coarse network fix first and the GPS fix a few seconds later:
+    // keep waiting for a precise one and give up only after GPS_WAIT_MS.
+    const giveUp = () => {
+      clear();
+      setActive(false);
+      setSearching(null);
+      setWeak(Number.isFinite(bestAccuracy.current) ? Math.round(bestAccuracy.current) : null);
+      if (!Number.isFinite(bestAccuracy.current)) toast("GPS siqnalı tapılmadı", "error");
+    };
+    timer.current = setTimeout(() => !gotPrecise.current && giveUp(), GPS_WAIT_MS);
+    const onPosition = (pos) => {
         const { latitude, longitude, accuracy, speed } = pos.coords;
+        bestAccuracy.current = Math.min(bestAccuracy.current, accuracy);
+        onFix({ lat: latitude, lon: longitude, accuracy }); // the map shows every fix
         if (accuracy > MAX_ACCURACY_M) {
-          clear();
-          setActive(false);
-          setWeak(Math.round(accuracy));
+          if (!gotPrecise.current) setSearching(Math.round(accuracy));
           return;
         }
-        onFix({ lat: latitude, lon: longitude, accuracy }); // the map shows every fix
+        gotPrecise.current = true;
+        setSearching(null);
         const now = Date.now();
         if (now - lastSent.current < SEND_EVERY_MS) return;
         lastSent.current = now;
         send(latitude, longitude, accuracy, speed);
-      },
+    };
+    // instant start from the warmed-up fix
+    const w = warm.current;
+    if (w && Date.now() - w.timestamp < FRESH_FIX_MS) onPosition(w);
+    watchId.current = navigator.geolocation.watchPosition(
+      onPosition,
       (e) => {
+        if (e.code === 3) return; // no fix yet: keep waiting until GPS_WAIT_MS
         toast(geoError(e), "error");
         stop();
       },
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 },
+      { enableHighAccuracy: true, maximumAge: FRESH_FIX_MS, timeout: GPS_WAIT_MS },
     );
   };
 
@@ -143,8 +186,8 @@ export default function LiveTracking({ route, buses, onFix = () => {}, onPickReq
             {weak && (
               <motion.div className="gps-weak" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
                 <p>
-                  Cihazın GPS dəqiqliyi zəifdir (±{weak.toLocaleString("az-AZ")} m). Kompüterdə GPS çipi olmur, yer IP ünvanına görə təxmin edilir.
-                  Real GPS üçün telefondan istifadə edin.
+                  Dəqiq GPS tapılmadı (ən yaxşı: ±{weak.toLocaleString("az-AZ")} m). Telefonda: “Dəqiq yer” icazəsini və GPS-i açın,
+                  pəncərəyə yaxın və ya açıq yerdə yenidən cəhd edin. Kompüterdə GPS çipi olmur.
                 </p>
                 <button className="btn block" onClick={startManual}>
                   <MousePointerClick size={16} /> Test rejimi: xəritədə yerimi seç
@@ -159,7 +202,9 @@ export default function LiveTracking({ route, buses, onFix = () => {}, onPickReq
           <div className="grow">
             <b>{manual ? "Mövqe ötürülür · test rejimi" : "Canlı GPS ötürülür"}</b>
             <div className="meta">
-              {status ? (
+              {searching && !status ? (
+                <span>GPS axtarılır… indiki dəqiqlik ±{searching.toLocaleString("az-AZ")} m (lazımdır ≤ {MAX_ACCURACY_M} m)</span>
+              ) : status ? (
                 <>
                   {status.accuracy != null && <span>dəqiqlik {status.accuracy} m</span>}
                   <span>xətdən {status.offset} m</span>

@@ -30,7 +30,7 @@ MAX_GPS_OFFSET_M = _float("MAX_GPS_OFFSET_M", 400)
 
 # Passenger phone acting as the bus GPS ("I'm on this bus").
 LIVE_TTL_SEC = _int("LIVE_TTL_SEC", 30)            # bus counts as live this long after the last fix
-MAX_GPS_ACCURACY_M = _float("MAX_GPS_ACCURACY_M", 200)
+MAX_GPS_ACCURACY_M = _float("MAX_GPS_ACCURACY_M", 300)
 
 DEFAULT_SPEED_KMH = _float("DEFAULT_SPEED_KMH", 18)
 DWELL_SEC_PER_STOP = _int("DWELL_SEC_PER_STOP", 25)

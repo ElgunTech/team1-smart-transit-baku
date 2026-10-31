@@ -135,6 +135,12 @@ def stop_arrivals(stop_id: str, request: Request):
     return _svc(request).arrivals(stop_id)
 
 
+@router.get("/arrivals", dependencies=[Depends(current_user)])
+def multi_arrivals(request: Request, stops: str = Query(..., max_length=500)):
+    """Arrivals for several stops at once, e.g. ?stops=s1,s2 (same stop name on both sides of a street)."""
+    return _svc(request).arrivals_multi(stops.split(","))
+
+
 @router.post("/reports", status_code=201)
 def create_report(body: ReportIn, request: Request, user: dict = Depends(current_user)):
     # The account id is the reporter identity: one report per line per cooldown.

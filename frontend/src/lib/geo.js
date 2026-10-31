@@ -44,7 +44,8 @@ export function currentPosition() {
     }
     navigator.geolocation.getCurrentPosition(resolve, (e) => reject(new Error(geoError(e))), {
       enableHighAccuracy: true,
-      timeout: 15000,
+      maximumAge: 15000, // a recent fix is good enough to find nearby lines, and instant
+      timeout: 10000,
     });
   });
 }

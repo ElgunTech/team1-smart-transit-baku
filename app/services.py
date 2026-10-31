@@ -238,6 +238,24 @@ class TransitService:
         items.sort(key=lambda x: x["eta_sec"])
         return {"stop": {"id": stop.id, "name": stop.name, "lat": stop.lat, "lon": stop.lon}, "arrivals": items}
 
+    def arrivals_multi(self, stop_ids: list[str], per_route: int = 2) -> dict:
+        """Stops sharing one name (both sides of the street) shown as one place:
+        the soonest buses per route across all of them."""
+        stop_ids = list(dict.fromkeys(s for s in stop_ids if s))[:10]
+        if not stop_ids:
+            raise InvalidInput("Dayanacaq göstərilməyib")
+        results = [self.arrivals(sid, per_route) for sid in stop_ids]
+        best: dict[str, dict] = {}
+        for res in results:
+            for a in res["arrivals"]:
+                if a["bus_id"] not in best or a["eta_sec"] < best[a["bus_id"]]["eta_sec"]:
+                    best[a["bus_id"]] = {**a, "stop_id": res["stop"]["id"]}
+        by_route: dict[str, list] = defaultdict(list)
+        for a in sorted(best.values(), key=lambda x: x["eta_sec"]):
+            by_route[a["route_id"]].append(a)
+        items = sorted((a for lst in by_route.values() for a in lst[:per_route]), key=lambda x: x["eta_sec"])
+        return {"stop": results[0]["stop"], "stop_ids": stop_ids, "arrivals": items}
+
     # --- crowdsourcing -----------------------------------------------------------------
     def submit_report(self, route_id: str, level: str, client_id: str, bus_id: str | None = None,
                       stop_id: str | None = None, source: str = "user", enforce_cooldown: bool = True,

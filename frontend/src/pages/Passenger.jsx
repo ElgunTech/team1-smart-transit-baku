@@ -67,7 +67,7 @@ function useMyLocation(toast) {
         toast(geoError(e), "error");
         stop();
       },
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 },
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
     );
   };
   useEffect(() => stop, []);
@@ -79,7 +79,7 @@ export default function Passenger() {
   const toast = useToast();
   const [tab, setTab] = useState("routes");
   const [routeId, setRouteId] = useState(null);
-  const [stopId, setStopId] = useState(null);
+  const [stopKey, setStopKey] = useState(null);
   const [sheetUp, setSheetUp] = useState(false);
   const [showTop, setShowTop] = useState(false);
   const [trackFix, setTrackFix] = useState(null);
@@ -95,20 +95,38 @@ export default function Passenger() {
   // a new view starts at the top of the panel
   useEffect(() => {
     panelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, [tab, routeId, stopId]);
+  }, [tab, routeId, stopKey]);
+
+  // Open data has a separate stop on each side of the street with the same name;
+  // passengers think of them as one place, so they are grouped by name.
+  const { stopGroups, groupOf } = useMemo(() => {
+    const byKey = new Map();
+    for (const s of net.stops) {
+      const key = norm(s.name);
+      if (!byKey.has(key)) byKey.set(key, { key, name: s.name, ids: [], stops: [], routes: new Set() });
+      const g = byKey.get(key);
+      g.ids.push(s.id);
+      g.stops.push(s);
+      s.routes.forEach((r) => g.routes.add(r));
+    }
+    const groups = [...byKey.values()].map((g) => ({ ...g, routes: [...g.routes] }));
+    const of = {};
+    groups.forEach((g) => g.ids.forEach((id) => { of[id] = g.key; }));
+    return { stopGroups: groups, groupOf: of };
+  }, [net]);
 
   const route = routeId ? net.routesById[routeId] : null;
-  const stop = stopId ? net.stopsById[stopId] : null;
+  const stop = stopKey ? stopGroups.find((g) => g.key === stopKey) : null;
   const { data: live } = usePolling(route ? `/api/routes/${route.id}/live` : null);
-  const { data: arrivals } = usePolling(stop && tab === "stops" ? `/api/stops/${stop.id}/arrivals` : null);
+  const { data: arrivals } = usePolling(stop && tab === "stops" ? `/api/arrivals?stops=${stop.ids.join(",")}` : null);
 
   const selectRoute = (id) => {
     if (pick) return; // a click while picking a position must not switch the line
     setRouteId(id);
     setTab("routes");
   };
-  const openStop = (id) => {
-    setStopId(id);
+  const openStop = (idOrKey) => {
+    setStopKey(groupOf[idOrKey] || idOrKey);
     setTab("stops");
   };
 
@@ -146,9 +164,9 @@ export default function Passenger() {
           ) : (
             <motion.section key="stops" className="tab-body" initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.18 }}>
               {stop ? (
-                <StopDetail stop={stop} data={arrivals} onBack={() => setStopId(null)} onRoute={selectRoute} />
+                <StopDetail stop={stop} data={arrivals} onBack={() => setStopKey(null)} onRoute={selectRoute} />
               ) : (
-                <StopBrowser onOpen={openStop} />
+                <StopBrowser groups={stopGroups} onOpen={openStop} />
               )}
             </motion.section>
           )}
@@ -195,10 +213,10 @@ export default function Passenger() {
         <NetworkLines routes={net.routes} selected={route?.id} onSelect={selectRoute} />
         {route && <RouteLine route={route} weight={6} opacity={0.95} flow />}
         {route && <StopLayer stops={routeStops} onClick={openStop} radius={4} />}
-        {stop && tab === "stops" && <StopLayer stops={[stop]} radius={8} />}
+        {stop && tab === "stops" && <StopLayer stops={stop.stops} radius={8} />}
         <BusLayer buses={mapBuses} routesById={net.routesById} onClick={(b) => selectRoute(b.route_id)} />
         {route && tab === "routes" && <FitBounds points={route.path} deps={[route.id]} />}
-        {stop && tab === "stops" && <FlyTo center={[stop.lat, stop.lon]} zoom={16} />}
+        {stop && tab === "stops" && <FlyTo center={[stop.stops[0].lat, stop.stops[0].lon]} zoom={16} />}
       </BaseMap>
       </div>
     </main>
@@ -214,13 +232,35 @@ function RouteBrowser({ onSelect }) {
   const [near, setNear] = useState(null); // { routeId: distance } around the user
   const [locating, setLocating] = useState(false);
 
+  const [openGroup, setOpenGroup] = useState(null);
+  const needle = norm(q.trim());
+  // a number-like query keeps the compact grid; a name query or "nearby" shows detailed rows
+  const numberQuery = /^\d+[a-zəüöğışç]?$/i.test(needle);
+  const listMode = Boolean(near) || (needle && !numberQuery);
+
   const routes = useMemo(() => {
-    const needle = norm(q.trim());
     let list = net.routes;
     if (near) list = list.filter((r) => near[r.id] != null).sort((a, b) => near[a.id] - near[b.id]);
     if (needle) list = list.filter((r) => norm(r.number).startsWith(needle) || norm(r.name).includes(needle));
     return list;
-  }, [q, net.routes, near]);
+  }, [needle, net.routes, near]);
+
+  // 108A and 108B are variants of line 108: one tile per base number
+  const groups = useMemo(() => {
+    const byBase = new Map();
+    for (const r of routes) {
+      const base = r.number.match(/^\d+/)?.[0] ?? r.number;
+      if (!byBase.has(base)) byBase.set(base, []);
+      byBase.get(base).push(r);
+    }
+    return [...byBase.entries()].map(([base, variants]) => ({ base, variants }));
+  }, [routes]);
+  const opened = openGroup ? groups.find((g) => g.base === openGroup) : null;
+
+  const tapGroup = (g) => {
+    if (g.variants.length === 1) onSelect(g.variants[0].id);
+    else setOpenGroup(openGroup === g.base ? null : g.base);
+  };
 
   const findNearby = async () => {
     setLocating(true);
@@ -257,24 +297,96 @@ function RouteBrowser({ onSelect }) {
         </button>
       )}
       <div className="list-meta">{routes.length} xətt · mənbə: opendata.az</div>
-      <ul className="route-list">
-        {routes.slice(0, 120).map((r, i) => (
-          <motion.li key={r.id} custom={i} variants={listItem} initial="hidden" animate="show" onClick={() => onSelect(r.id)} whileHover={{ x: 3 }}>
-            <RouteBadge route={r} />
-            <div className="grow">
-              <div className="route-name">{r.name}</div>
-              <div className="meta">
-                <span>{r.stops.length} dayanacaq</span>
-                <span>{(r.length_m / 1000).toFixed(1)} km{r.loop ? " · dairəvi" : ""}</span>
-                {near?.[r.id] != null && <span className="near-tag">{near[r.id]} m</span>}
-              </div>
-            </div>
-          </motion.li>
-        ))}
-        {!routes.length && <li className="muted">Heç nə tapılmadı</li>}
-      </ul>
+
+      {listMode ? (
+        <ul className="route-list">
+          {routes.slice(0, 120).map((r, i) => (
+            <RouteRow key={r.id} route={r} i={i} onSelect={onSelect} near={near?.[r.id]} />
+          ))}
+          {!routes.length && <li className="muted">Heç nə tapılmadı</li>}
+        </ul>
+      ) : (
+        <>
+          <AnimatePresence>
+            {opened && (
+              <motion.div
+                className="variant-card"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <div className="variant-head">
+                  <b>Xətt {opened.base}</b>
+                  <span className="muted small">{opened.variants.length} variant</span>
+                  <button className="icon-close" onClick={() => setOpenGroup(null)} aria-label="Bağla"><X size={15} /></button>
+                </div>
+                <ul className="route-list">
+                  {opened.variants.map((r, i) => (
+                    <RouteRow key={r.id} route={r} i={i} onSelect={onSelect} />
+                  ))}
+                </ul>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="route-tiles">
+            {groups.map((g, i) => (
+              <motion.button
+                key={g.base}
+                className={`route-tile${openGroup === g.base ? " open" : ""}`}
+                style={{ "--c": g.variants[0].color }}
+                onClick={() => tapGroup(g)}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: Math.min(i, 30) * 0.01 }}
+                whileTap={{ scale: 0.94 }}
+                title={g.variants.map((v) => `${v.number}: ${v.name}`).join("\n")}
+              >
+                <span className="tile-num">{g.base}</span>
+                {g.variants.length > 1 && (
+                  <span className="tile-variants">
+                    {g.variants.map((v) => v.number.slice(g.base.length) || "•").join(" ")}
+                  </span>
+                )}
+              </motion.button>
+            ))}
+            {!groups.length && <div className="muted">Heç nə tapılmadı</div>}
+          </div>
+        </>
+      )}
     </>
   );
+}
+
+function RouteRow({ route: r, i, onSelect, near }) {
+  return (
+    <motion.li custom={i} variants={listItem} initial="hidden" animate="show" onClick={() => onSelect(r.id)} whileHover={{ x: 3 }}>
+      <RouteBadge route={r} />
+      <div className="grow">
+        <div className="route-name">{r.name}</div>
+        <div className="meta">
+          <span>{r.stops.length} dayanacaq</span>
+          <span>{(r.length_m / 1000).toFixed(1)} km{r.loop ? " · dairəvi" : ""}</span>
+          {near != null && <span className="near-tag">{near} m</span>}
+        </div>
+      </div>
+    </motion.li>
+  );
+}
+
+/** Consecutive stops with the same name (both sides of a street) shown once, soonest ETA. */
+function collapseStops(stops) {
+  const out = [];
+  for (const s of stops) {
+    const prev = out[out.length - 1];
+    if (prev && norm(prev.name) === norm(s.name)) {
+      if (s.next_eta_sec != null && (prev.next_eta_sec == null || s.next_eta_sec < prev.next_eta_sec)) {
+        prev.next_eta_sec = s.next_eta_sec;
+      }
+    } else {
+      out.push({ ...s });
+    }
+  }
+  return out;
 }
 
 function RouteDetail({ route, live, onStop, onBack, onFix, onPickRequest }) {
@@ -299,7 +411,7 @@ function RouteDetail({ route, live, onStop, onBack, onFix, onPickRequest }) {
             <Skeleton rows={6} />
           ) : (
             <ul className="timeline" style={{ "--route-color": route.color }}>
-              {live.stops.map((s, i) => (
+              {collapseStops(live.stops).map((s, i) => (
                 <motion.li key={`${s.id}-${i}`} custom={i} variants={listItem} initial="hidden" animate="show" onClick={() => onStop(s.id)}>
                   <span>{s.name}</span>
                   <Eta sec={s.next_eta_sec} />
@@ -367,15 +479,15 @@ function ReportBox({ route, buses }) {
   );
 }
 
-function StopBrowser({ onOpen }) {
+function StopBrowser({ groups, onOpen }) {
   const net = useNetwork();
   const [q, setQ] = useState("");
   const stops = useMemo(() => {
     const needle = norm(q.trim());
-    return net.stops
-      .filter((s) => !needle || norm(s.name).includes(needle))
+    return groups
+      .filter((s) => !needle || s.key.includes(needle))
       .sort((a, b) => b.routes.length - a.routes.length || a.name.localeCompare(b.name, "az"));
-  }, [q, net.stops]);
+  }, [q, groups]);
 
   return (
     <>
@@ -388,8 +500,11 @@ function StopBrowser({ onOpen }) {
       </div>
       <ul className="stop-list">
         {stops.slice(0, STOP_LIMIT).map((s, i) => (
-          <motion.li key={s.id} custom={i} variants={listItem} initial="hidden" animate="show" onClick={() => onOpen(s.id)}>
-            <span className="stop-name"><MapPin size={15} /> {s.name}</span>
+          <motion.li key={s.key} custom={i} variants={listItem} initial="hidden" animate="show" onClick={() => onOpen(s.key)}>
+            <span className="stop-name">
+              <MapPin size={15} /> <span className="stop-label">{s.name}</span>
+              {s.ids.length > 1 && <span className="stop-count">{s.ids.length}</span>}
+            </span>
             <span className="mini-badges">
               {s.routes.slice(0, 5).map((rid) => <RouteBadge key={rid} route={net.routesById[rid]} size="sm" />)}
               {s.routes.length > 5 && <span className="more">+{s.routes.length - 5}</span>}
@@ -412,7 +527,10 @@ function StopDetail({ stop, data, onBack, onRoute }) {
           <span className="stop-icon"><MapPin size={18} /></span>
           <div className="grow">
             <div className="card-title">{stop.name}</div>
-            <div className="meta"><span>{stop.routes.length} xətt · yaxınlaşan avtobuslar</span></div>
+            <div className="meta">
+              <span>{stop.routes.length} xətt</span>
+              {stop.ids.length > 1 && <span>{stop.ids.length} dayanacaq nöqtəsi</span>}
+            </div>
           </div>
         </div>
         <div className="card-body">

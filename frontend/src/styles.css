@@ -240,6 +240,30 @@ h2 { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
 .route-chip.selected { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .route-chip-name { font-size: 12.5px; font-weight: 600; color: var(--ink-2); line-height: 1.3; }
 
+/* compact grid of line numbers; variants (108A/108B) share one tile */
+.route-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 8px; }
+.route-tile {
+  position: relative; height: 54px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface);
+  display: grid; place-content: center; justify-items: center; gap: 1px; overflow: hidden; padding: 4px 2px 2px;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.route-tile::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--c); }
+.route-tile:hover { border-color: var(--line-2); box-shadow: var(--shadow); }
+.route-tile.open { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); background: var(--surface-2); }
+.tile-num { font-weight: 800; font-size: 17px; letter-spacing: -.02em; line-height: 1.1; }
+.tile-variants { font-size: 10.5px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
+.variant-card { overflow: hidden; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-2); padding: 10px; }
+.variant-head { display: flex; align-items: center; gap: 8px; margin: 0 2px 8px; }
+.icon-close {
+  margin-left: auto; width: 28px; height: 28px; border-radius: 7px; border: 0; background: var(--surface);
+  display: grid; place-items: center; color: var(--muted);
+}
+.icon-close:hover { color: var(--ink); }
+.stop-label { overflow: hidden; text-overflow: ellipsis; }
+.stop-count {
+  flex-shrink: 0; min-width: 20px; height: 18px; padding: 0 5px; border-radius: 99px; background: var(--surface-2);
+  border: 1px solid var(--line); font-size: 11px; font-weight: 700; color: var(--muted); display: inline-grid; place-items: center;
+}
 .list-meta { font-size: 12.5px; color: var(--muted); margin: -6px 2px 0; }
 .route-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .route-list li {
@@ -510,6 +534,17 @@ tr.row-alert { background: #fff8f8; }
   .tab-body { padding: 14px 12px 24px; }
   .locate-btn span { display: none; }
   .locate-btn { padding: 10px; }
+  .route-tiles { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; }
+  .route-tile { height: 50px; }
+  .stop-list li { padding: 10px 4px; align-items: flex-start; }
+  .stop-name { min-width: 0; font-size: 14px; }
+  .mini-badges { flex-wrap: wrap; justify-content: flex-end; max-width: 45%; }
+  .card-head { padding: 12px; }
+  .card-body { padding: 12px; }
+  .timeline li { padding: 9px 4px 9px 28px; font-size: 14px; }
+  .report-box, .live-box { padding: 14px; }
+  .level-btn { height: 56px; }
+  .route-list li { padding: 9px 10px; }
   .topbar { padding: 0 12px; }
   .clock, .live, .user-name, .module-tag { display: none; }
   .ops { padding: 12px; }

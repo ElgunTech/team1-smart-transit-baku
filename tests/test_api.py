@@ -165,6 +165,17 @@ def test_arrivals_sorted_and_route_live(client, pax):
     assert client.get("/api/stops/nowhere/arrivals", headers=pax).status_code == 404
 
 
+def test_multi_stop_arrivals_merge(client, pax):
+    single = client.get("/api/stops/may28/arrivals", headers=pax).json()["arrivals"]
+    merged = client.get("/api/arrivals", params={"stops": "may28,nizami"}, headers=pax).json()
+    assert merged["stop_ids"] == ["may28", "nizami"]
+    routes = {a["route_id"] for a in merged["arrivals"]}
+    assert {"r1", "r13", "r88"} <= routes
+    etas = [a["eta_sec"] for a in merged["arrivals"]]
+    assert etas == sorted(etas) and len(merged["arrivals"]) >= len(single)
+    assert client.get("/api/arrivals", params={"stops": "nowhere"}, headers=pax).status_code == 404
+
+
 def test_gps_ingest_snaps_to_route(client, pax):
     # a point near "Gənclik" on line 1
     res = client.post("/api/gps", json={"bus_id": "r1-b1", "lat": 40.4005, "lon": 49.8521, "speed_kmh": 20})
