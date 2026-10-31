@@ -3,7 +3,7 @@
 **Müsabiqə:** Digital Challenge Azerbaijan 2026 – Yarımfinal
 **Tarix:** 31 oktyabr 2026
 **Komanda:** Team 1
-**Komanda üzvləri:** Şükürov Elgün, Mehdiyev İsgəndər, Məlikova Fatimə
+**Komanda üzvləri:** Şükürov Elgün Ramin oğlu, Mehdiyev İsgəndər Azər oğlu, Məlikova Fatimə Xəyal qızı
 **Layihə:** SmartTransit Bakı — Smart Transit & Crowdsourcing Engine
 
 ---
@@ -65,9 +65,9 @@ Promptlar azərbaycan dilində yazılıb. Aşağıda sıra ilə real promptları
 
 | Üzv | Rol | Əsas iş |
 |---|---|---|
-| Şükürov Elgün (Səbət 1) | Texniki lider, arxitektura | [ ] |
-| Mehdiyev İsgəndər (Səbət 2) | Backend və testlər | [ ] |
-| Məlikova Fatimə (Səbət 3) | UI yoxlaması və sənədləşmə | [ ] |
+| Şükürov Elgün Ramin oğlu (Səbət 1) | Backend / API | AI-a promptların göndərilməsi və tələblərin qoyulması; kodun AI ilə yazılması və sistemə inteqrasiyası; testlərin yaradılması və sistemin sınaqdan keçirilməsi |
+| Mehdiyev İsgəndər Azər oğlu (Səbət 2) | Frontend / UI-UX | İnterfeysin və responsivliyin (mobil görünüş) yoxlanılması, bugların aşkarlanması |
+| Məlikova Fatimə Xəyal qızı (Səbət 3) | AI inteqrasiyası və sənədləşmə | AI ilə vahid (unit) testlərin yazılması, sənədlərin hazırlanması, yeni funksiyaların araşdırılması |
 
 ## 8. Məhdudiyyətlər və öyrəndiklərimiz
 
@@ -79,4 +79,4 @@ Promptlar azərbaycan dilində yazılıb. Aşağıda sıra ilə real promptları
 
 Komandamız təsdiq edir ki, bu bəyannamədə yazılanlar doğrudur, yarış qaydalarına (bənd 5) əməl olunub və üçüncü şəxslərdən kömək alınmayıb.
 
-Şükürov Elgün · Mehdiyev İsgəndər · Məlikova Fatimə
+Şükürov Elgün Ramin oğlu · Mehdiyev İsgəndər Azər oğlu · Məlikova Fatimə Xəyal qızı
