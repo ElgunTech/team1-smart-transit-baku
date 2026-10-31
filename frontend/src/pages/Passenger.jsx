@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, ArrowUp, Bus, Check, ChevronDown, ChevronUp, Clock3, LocateFixed, MapPin, Navigation, Search, Users, X } from "lucide-react";
 import LiveTracking from "../components/LiveTracking.jsx";
 import RewardsCard, { useRewards } from "../components/Rewards.jsx";
-import { BaseMap, BusLayer, FitBounds, FlyTo, MyLocation, PickOnMap, RouteLine, StopLayer } from "../components/TransitMap.jsx";
+import { BaseMap, BusLayer, FitBounds, FlyTo, MyLocation, PickOnMap, RouteLine, StopLayer, ViewportBuses } from "../components/TransitMap.jsx";
 import { currentPosition, distanceToPath, geoError } from "../lib/geo.js";
 import { Eta, LevelPill, RouteBadge, Skeleton } from "../components/ui.jsx";
 import { useToast } from "../components/Toast.jsx";
@@ -230,7 +230,11 @@ export default function Passenger() {
         {route && <RouteLine route={route} weight={6} opacity={0.95} flow />}
         {route && <StopLayer stops={routeStops} onClick={openStop} radius={4} />}
         {stop && tab === "stops" && <StopLayer stops={stop.stops} radius={8} />}
-        <BusLayer buses={mapBuses} routesById={net.routesById} onClick={(b) => selectRoute(b.route_id)} />
+        {route || (stop && tab === "stops") ? (
+          <BusLayer buses={mapBuses} routesById={net.routesById} onClick={(b) => selectRoute(b.route_id)} />
+        ) : (
+          <ViewportBuses routesById={net.routesById} onClick={(b) => selectRoute(b.route_id)} />
+        )}
         {route && tab === "routes" && <FitBounds points={route.path} deps={[route.id]} />}
         {stop && tab === "stops" && <FlyTo center={[stop.stops[0].lat, stop.stops[0].lon]} zoom={16} />}
       </BaseMap>
@@ -405,7 +409,12 @@ function collapseStops(stops) {
   return out;
 }
 
+const TIMELINE_PREVIEW = 6;
+
 function RouteDetail({ route, live, me, rewards, onReported, onStop, onBack, onFix, onPickRequest }) {
+  const [allStops, setAllStops] = useState(false);
+  const stops = live ? collapseStops(live.stops) : [];
+  const shown = allStops ? stops : stops.slice(0, TIMELINE_PREVIEW);
   return (
     <motion.div className="stack" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
       <button className="back" onClick={onBack}><ArrowLeft size={16} /> Bütün xətlər</button>
@@ -426,14 +435,21 @@ function RouteDetail({ route, live, me, rewards, onReported, onStop, onBack, onF
           {!live ? (
             <Skeleton rows={6} />
           ) : (
-            <ul className="timeline" style={{ "--route-color": route.color }}>
-              {collapseStops(live.stops).map((s, i) => (
-                <motion.li key={`${s.id}-${i}`} custom={i} variants={listItem} initial="hidden" animate="show" onClick={() => onStop(s.id)}>
-                  <span>{s.name}</span>
-                  <Eta sec={s.next_eta_sec} />
-                </motion.li>
-              ))}
-            </ul>
+            <>
+              <ul className="timeline" style={{ "--route-color": route.color }}>
+                {shown.map((s, i) => (
+                  <motion.li key={`${s.id}-${i}`} custom={i} variants={listItem} initial="hidden" animate="show" onClick={() => onStop(s.id)}>
+                    <span>{s.name}</span>
+                    <Eta sec={s.next_eta_sec} />
+                  </motion.li>
+                ))}
+              </ul>
+              {stops.length > TIMELINE_PREVIEW && (
+                <button className="show-more" onClick={() => setAllStops((v) => !v)}>
+                  {allStops ? <><ChevronUp size={15} /> Qısalt</> : <><ChevronDown size={15} /> Bütün dayanacaqlar ({stops.length})</>}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

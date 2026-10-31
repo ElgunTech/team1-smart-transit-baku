@@ -1,4 +1,4 @@
-# SmartTransit Bakı — Smart Transit & Crowdsourcing Engine
+﻿# SmartTransit Bakı — Smart Transit & Crowdsourcing Engine
 
 **Team 1** · Digital Challenge Azerbaijan 2026 · Yarımfinal
 Şükürov Elgün · Mehdiyev İsgəndər · Məlikova Fatimə
@@ -65,7 +65,7 @@ npm run build      # build-i ../static qovluğuna yazır
 python -m pytest -q
 ```
 
-56 avtomatik test var. Onlar analitika engine-ini, anomaliya qaydasını, ETA hesablamasını (dairəvi xətlər daxil), GPS-in marşruta bağlanmasını, autentifikasiyanı, rolları, bütün API axınlarını və real opendata şəbəkəsinin yüklənib simulyasiya olunmasını yoxlayır. API testləri kiçik demo şəbəkəsində işləyir və saat saxta saatla (fake clock) idarə olunur, ona görə nəticə deterministikdir.
+57 avtomatik test var. Onlar analitika engine-ini, anomaliya qaydasını, ETA hesablamasını (dairəvi xətlər daxil), GPS-in marşruta bağlanmasını, autentifikasiyanı, rolları, bütün API axınlarını və real opendata şəbəkəsinin yüklənib simulyasiya olunmasını yoxlayır. API testləri kiçik demo şəbəkəsində işləyir və saat saxta saatla (fake clock) idarə olunur, ona görə nəticə deterministikdir.
 
 ### Açıq məlumatın yenidən idxalı
 
@@ -172,6 +172,7 @@ Eyni mexanizm rəsmi GPS axını (`/api/gps`) üçün də işləyir. Qeyd: brauz
 | GET | `/api/operator/overview` | operator | KPI-lar və xətlər üzrə analitika |
 | GET | `/api/operator/alerts?status=` | operator | Xəbərdarlıqlar |
 | POST | `/api/operator/alerts/{id}/dispatch` · `/dismiss` | operator | Ehtiyat ayır / rədd et |
+| POST | `/api/operator/alerts/dispatch-all` | operator | Bütün açıq xəbərdarlıqları bir kliklə qəbul et |
 | GET | `/api/operator/reports` | operator | Son bildirişlər |
 | POST | `/api/demo/rush/{route_id}` | operator | Demo: pik saat simulyasiyası |
 

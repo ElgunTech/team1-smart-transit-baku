@@ -189,6 +189,11 @@ def alerts(request: Request, status: Literal["open", "dispatched", "dismissed"] 
     return _svc(request).alerts(status, limit)
 
 
+@ops_router.post("/operator/alerts/dispatch-all")
+def dispatch_all(request: Request):
+    return _svc(request).dispatch_all()
+
+
 @ops_router.post("/operator/alerts/{alert_id}/dispatch")
 def dispatch(alert_id: int, request: Request):
     return _svc(request).dispatch_alert(alert_id)

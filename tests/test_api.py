@@ -331,5 +331,15 @@ def test_no_new_alert_right_after_operator_action(client, ops, clock):
     assert len(open_alerts(client, ops)) == 1
 
 
+def test_dispatch_all_accepts_every_open_alert(client, ops):
+    flood(client, "r1", n=3)
+    flood(client, "r13", n=3)
+    assert len(open_alerts(client, ops)) == 2
+    res = client.post("/api/operator/alerts/dispatch-all", headers=ops).json()
+    assert res["dispatched_alerts"] == 2 and res["buses"] >= 2
+    assert open_alerts(client, ops) == []
+    assert client.post("/api/operator/alerts/dispatch-all", headers=ops).json()["dispatched_alerts"] == 0
+
+
 def test_demo_rush_triggers_alert(client, ops):
     assert client.post("/api/demo/rush/r13", headers=ops).json()["alert_id"] is not None

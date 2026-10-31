@@ -1,16 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Activity, AlertTriangle, ArrowUp, Bus, CheckCircle2, Flame, MessageSquareText, Search, Siren, X, Zap } from "lucide-react";
-import { BaseMap, RouteLine } from "../components/TransitMap.jsx";
+import { Activity, AlertTriangle, ArrowUp, Bus, CheckCheck, CheckCircle2, Flame, MessageSquareText, Search, Siren, X, Zap } from "lucide-react";
+import { BaseMap, FitBounds, RouteLine } from "../components/TransitMap.jsx";
 import { AnimatedNumber, LevelPill, RouteBadge, Skeleton } from "../components/ui.jsx";
 import { useToast } from "../components/Toast.jsx";
 import { post, usePolling } from "../lib/api.js";
 import { LEVEL_AZ, LEVEL_COLOR, SOURCE_AZ, ago } from "../lib/format.js";
 import { useNetwork } from "../lib/network.jsx";
-import { Tooltip } from "react-leaflet";
+import { Polyline, Tooltip } from "react-leaflet";
 
 const SEVERITY = { unknown: 0, low: 1, medium: 2, high: 3 };
 const ROW_LIMIT = 12;
+const MAP_FILTERS = [
+  { id: "problem", label: "Problemli" },
+  { id: "busy", label: "Yüksək + Orta" },
+  { id: "all", label: "Hamısı" },
+];
+
+// Whole network as faint grey context lines (memoised: 230+ polylines).
+const NetworkBase = memo(function NetworkBase({ routes }) {
+  return routes.map((r) => (
+    <Polyline key={r.id} positions={r.path} pathOptions={{ color: "#6b7780", weight: 1.5, opacity: 0.22, interactive: false }} />
+  ));
+});
 
 function Kpi({ icon: Icon, label, value, alarm, delay, sub }) {
   return (
@@ -39,6 +51,9 @@ export default function Operator() {
   const [demoRoute, setDemoRoute] = useState(net.routes[0].id);
   const [q, setQ] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [mapFilter, setMapFilter] = useState("problem");
+  const [focus, setFocus] = useState(null);
+  const mapRef = useRef(null);
   const [busy, setBusy] = useState(null);
   const seen = useRef(null);
   const [fresh, setFresh] = useState(new Set());
@@ -88,6 +103,23 @@ export default function Operator() {
         || SEVERITY[b.level] - SEVERITY[a.level] || (b.score ?? 0) - (a.score ?? 0));
   }, [overview, q]);
   const visibleRows = showAll || q ? sortedRows : sortedRows.slice(0, ROW_LIMIT);
+  const openCount = (alerts || []).filter((a) => a.status === "open").length;
+
+  const matches = (id, row) => {
+    const level = row?.level || "unknown";
+    if (id === "problem") return level === "high" || Boolean(row?.open_alert_id);
+    if (id === "busy") return level === "high" || level === "medium";
+    return level !== "unknown";
+  };
+  const filterCount = (id) => net.routes.filter((r) => matches(id, levels[r.id])).length;
+  const shownRoutes = net.routes
+    .filter((r) => r.id === focus || matches(mapFilter, levels[r.id]))
+    .sort((a, b) => SEVERITY[levels[a.id]?.level || "unknown"] - SEVERITY[levels[b.id]?.level || "unknown"]);
+  const focusRoute = focus ? net.routesById[focus] : null;
+  const focusOn = (id) => {
+    setFocus(id);
+    mapRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
   const t = overview?.totals;
   const win = overview?.window_minutes ?? 10;
 
@@ -108,32 +140,37 @@ export default function Operator() {
 
       <div className="ops-grid">
         <div className="stack">
-          <section className="card">
-            <div className="card-head">
+          <section className="card" ref={mapRef}>
+            <div className="card-head wrap">
               <Activity size={18} />
               <h2>Sıxlıq xəritəsi</h2>
-              <div className="legend">
-                {["low", "medium", "high", "unknown"].map((l) => (
-                  <span key={l}><i style={{ background: LEVEL_COLOR[l] }} />{LEVEL_AZ[l]}</span>
+              <div className="seg push" role="group" aria-label="Xəritə filtri">
+                {MAP_FILTERS.map((f) => (
+                  <button key={f.id} className={mapFilter === f.id ? "active" : ""} onClick={() => setMapFilter(f.id)}>
+                    {f.label}
+                    {f.id !== "all" && <span className="seg-count">{filterCount(f.id)}</span>}
+                  </button>
                 ))}
               </div>
             </div>
-            <BaseMap className="ops-map" bounds={allPoints}>
-              {/* calm lines first, congested lines drawn on top */}
-              {[...net.routes]
-                .sort((a, b) => SEVERITY[levels[a.id]?.level || "unknown"] - SEVERITY[levels[b.id]?.level || "unknown"])
-                .map((r) => {
+            <div className="map-wrap">
+              <BaseMap className="ops-map" bounds={allPoints}>
+                {/* the whole network as faint context, only the lines that need attention in colour */}
+                <NetworkBase routes={net.routes} />
+                {shownRoutes.map((r) => {
                   const row = levels[r.id];
                   const level = row?.level || "unknown";
+                  const focused = focus === r.id;
                   return (
                     <RouteLine
-                      key={`${r.id}-${level}`}
+                      key={`${r.id}-${level}-${focused}`}
                       route={r}
                       color={LEVEL_COLOR[level]}
-                      weight={level === "high" ? 6 : level === "unknown" ? 2 : 3}
-                      opacity={level === "unknown" ? 0.35 : 0.85}
-                      casing={level === "high"}
-                      flow={level === "high"}
+                      weight={focused ? 8 : level === "high" ? 5 : 3}
+                      opacity={0.9}
+                      casing={focused || level === "high"}
+                      flow={focused || Boolean(row?.open_alert_id)}
+                      onClick={setFocus}
                     >
                       <Tooltip sticky>
                         <b>Xətt {r.number}</b> · {r.name}
@@ -143,7 +180,19 @@ export default function Operator() {
                     </RouteLine>
                   );
                 })}
-            </BaseMap>
+                {focusRoute && <FitBounds points={focusRoute.path} padding={30} deps={[focusRoute.id]} />}
+              </BaseMap>
+              <div className="map-legend">
+                {["high", "medium", "low"].map((l) => (
+                  <span key={l}><i style={{ background: LEVEL_COLOR[l] }} />{LEVEL_AZ[l]}</span>
+                ))}
+              </div>
+              {focusRoute && (
+                <button className="focus-chip" onClick={() => setFocus(null)}>
+                  <RouteBadge route={focusRoute} size="sm" /> {focusRoute.name} <X size={14} />
+                </button>
+              )}
+            </div>
           </section>
 
           <section className="card">
@@ -166,7 +215,12 @@ export default function Operator() {
                   </thead>
                   <tbody>
                     {visibleRows.map((r) => (
-                      <tr key={r.id} className={r.open_alert_id ? "row-alert" : ""}>
+                      <tr
+                        key={r.id}
+                        className={`${r.open_alert_id ? "row-alert" : ""}${focus === r.id ? " row-focus" : ""}`}
+                        onClick={() => focusOn(r.id)}
+                        title="Xəritədə göstər"
+                      >
                         <td><RouteBadge route={r} /></td>
                         <td><LevelPill level={r.level} /></td>
                         <td className="mono">{r.score ?? "—"}</td>
@@ -204,7 +258,17 @@ export default function Operator() {
             <div className="card-head">
               <AlertTriangle size={18} />
               <h2>Xəbərdarlıqlar</h2>
-              <span className="muted small push">Qayda: {win} dəq ərzində yüksək sıxlıq</span>
+              {openCount > 0 ? (
+                <button
+                  className="btn primary sm push"
+                  disabled={busy !== null}
+                  onClick={() => act("all", "/api/operator/alerts/dispatch-all", `${openCount} xəbərdarlıq qəbul edildi, ehtiyat avtobuslar yönləndirildi`)}
+                >
+                  <CheckCheck size={15} /> Hamısını qəbul et ({openCount})
+                </button>
+              ) : (
+                <span className="muted small push">Qayda: {win} dəq ərzində yüksək sıxlıq</span>
+              )}
             </div>
             <div className="alerts">
               {!alerts ? (

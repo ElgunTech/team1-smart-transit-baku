@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { LayoutDashboard, LogOut, MapPinned } from "lucide-react";
 import { useAuth } from "../lib/auth.jsx";
+import Logo from "./Logo.jsx";
 
 function Clock() {
   const [now, setNow] = useState(() => new Date());
@@ -19,10 +20,7 @@ export default function TopBar() {
   return (
     <header className="topbar">
       <div className="brand">
-        <span className="brand-mark">ST</span>
-        <span className="brand-name">
-          SmartTransit <b>Bakı</b>
-        </span>
+        <Logo />
         <span className="module-tag">
           {isOperator ? <LayoutDashboard size={14} /> : <MapPinned size={14} />}
           {isOperator ? "Operator paneli" : "Sərnişin"}

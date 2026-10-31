@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Bus, Clock3, Lock, Mail, User, Users } from "lucide-react";
 import { useAuth } from "../lib/auth.jsx";
+import Logo from "../components/Logo.jsx";
 
 const FEATURES = [
   { icon: Bus, title: "Canlı xəritə", text: "Avtobusların real vaxtda harada olduğunu izləyin" },
@@ -45,10 +46,7 @@ export default function Login() {
     <main className="auth">
       <section className="auth-hero">
         <div className="auth-hero-inner">
-          <div className="brand">
-            <span className="brand-mark">ST</span>
-            <span className="brand-name">SmartTransit <b>Bakı</b></span>
-          </div>
+          <Logo size={40} />
           <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
             Şəhər nəqliyyatı,<br />sərnişinlə birlikdə.
           </motion.h1>

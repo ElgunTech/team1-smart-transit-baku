@@ -416,6 +416,15 @@ class TransitService:
         self.store.close_alert(alert_id, "dispatched", f"Xəttə yönləndirildi: {plates}", now)
         return {"alert": self.store.get_alert(alert_id), "dispatched": moved}
 
+    def dispatch_all(self) -> dict:
+        """Accept every open recommendation in one go (most severe first)."""
+        open_alerts = sorted(self.store.list_alerts("open", 1000), key=lambda a: -a["high_share"])
+        results = [self.dispatch_alert(a["id"]) for a in open_alerts]
+        return {
+            "dispatched_alerts": len(results),
+            "buses": sum(len(r["dispatched"]) for r in results),
+        }
+
     def dismiss_alert(self, alert_id: int) -> dict:
         alert = self.store.get_alert(alert_id)
         if alert is None:

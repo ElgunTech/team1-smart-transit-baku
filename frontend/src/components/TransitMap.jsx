@@ -1,4 +1,6 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { BusFront } from "lucide-react";
+import { usePolling } from "../lib/api.js";
 import L from "leaflet";
 import { Circle, CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { LEVEL_AZ } from "../lib/format.js";
@@ -135,6 +137,30 @@ function BusMarker({ bus, route, dimmed, onClick }) {
       </Tooltip>
     </Marker>
   );
+}
+
+/**
+ * Overview mode: buses inside the visible map area. Drawing all ~980 at city zoom
+ * would be unreadable, so they appear from street zoom and are capped.
+ */
+export function ViewportBuses({ routesById, onClick, minZoom = 14, limit = 150 }) {
+  const map = useMap();
+  const [view, setView] = useState(() => ({ zoom: map.getZoom(), bounds: map.getBounds() }));
+  useMapEvents({ moveend: () => setView({ zoom: map.getZoom(), bounds: map.getBounds() }) });
+  const active = view.zoom >= minZoom;
+  const { data } = usePolling(active ? "/api/buses" : null, 4000);
+
+  if (!active) {
+    return (
+      <button className="map-hint" onClick={() => map.flyTo(map.getCenter(), minZoom, { duration: 0.6 })}>
+        <BusFront size={15} /> Avtobusları görmək üçün yaxınlaşdırın
+      </button>
+    );
+  }
+  if (!data) return null;
+  const area = view.bounds.pad(0.1);
+  const visible = data.filter((b) => area.contains([b.lat, b.lon])).slice(0, limit);
+  return <BusLayer buses={visible} routesById={routesById} onClick={onClick} />;
 }
 
 export function BusLayer({ buses, routesById, focusRoute, onClick }) {
